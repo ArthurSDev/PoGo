@@ -754,7 +754,6 @@
     </Compile>
     <Compile Include="Entities\FortDataWrapper.cs" />
     <Compile Include="Entities\IMapPokemon.cs" />
-    <Compile Include="Entities\IncensePokemon.cs" />
     <Compile Include="Entities\IUpdatable.cs" />
     <Compile Include="Entities\Language.cs" />
     <Compile Include="Entities\LuredPokemon.cs" />
@@ -774,6 +773,7 @@
     <Compile Include="Utils\ApplicationKeys.cs" />
     <Compile Include="Utils\Game\DataTemplateSelectors.cs" />
     <Compile Include="Utils\Game\FortDataStatus.cs" />
+    <Compile Include="Utils\Game\IncensePokemon.cs" />
     <Compile Include="Entities\VersionInfo.cs" />
     <Compile Include="Utils\Helpers\AsyncSynchronisationContext.cs" />
     <Compile Include="Utils\Helpers\AudioUtils.cs" />
