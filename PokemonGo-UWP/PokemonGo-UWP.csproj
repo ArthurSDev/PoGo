@@ -313,9 +313,7 @@
     <Content Include="Assets\LiveTiles\Transparent\Wide310x150Logo.scale-200.png" />
     <Content Include="Assets\LiveTiles\Transparent\Wide310x150Logo.scale-400.png" />
     <Content Include="Assets\Square44x44Logo.png" />
-    <Content Include="Assets\UI\ash.png" />
-    <Content Include="Assets\UI\ash_withincense.gif" />  
-    <Content Include="Assets\UI\bush.png" />
+	<Content Include="Assets\UI\bush.png" />
     <Content Include="Assets\UI\night_sky_texture_by_amdillon.jpg" />
     <Content Include="Assets\Pokemons\1.png" />
     <Content Include="Assets\Pokemons\10.png" />
@@ -754,7 +752,6 @@
     </Compile>
     <Compile Include="Entities\FortDataWrapper.cs" />
     <Compile Include="Entities\IMapPokemon.cs" />
-    <Compile Include="Entities\IncensePokemon.cs" />
     <Compile Include="Entities\IUpdatable.cs" />
     <Compile Include="Entities\Language.cs" />
     <Compile Include="Entities\LuredPokemon.cs" />
@@ -813,6 +810,9 @@
     <Compile Include="ViewModels\CapturePokemonPageViewModel.cs" />
     <Compile Include="ViewModels\EggDetailPageViewModel.cs" />
     <Compile Include="ViewModels\EnterGymPageViewModel.cs" />
+	<Compile Include="Views\Dialogs\LoadingScreen.xaml.cs">
+	  <DependentUpon>LoadingScreen.xaml</DependentUpon>
+	</Compile>
     <Compile Include="ViewModels\GameMapPageViewModel.cs" />
     <Compile Include="ViewModels\AchievementDetailPageViewModel.cs" />
     <Compile Include="ViewModels\PlayerProfileViewModel.cs" />
@@ -824,12 +824,6 @@
     <Compile Include="ViewModels\SettingsPageViewModel.cs" />
     <Compile Include="ViewModels\LoginPageViewModel.cs" />
     <Compile Include="ViewModels\SearchPokeStopPageViewModel.cs" />
-    <Compile Include="Views\Dialogs\LoadingScreen.xaml.cs">
-      <DependentUpon>LoadingScreen.xaml</DependentUpon>
-    </Compile>
-    <Compile Include="Views\Dialogs\InfoMessage.xaml.cs">
-      <DependentUpon>InfoMessage.xaml</DependentUpon>
-    </Compile>
     <Compile Include="Views\EggDetailPage.xaml.cs">
       <DependentUpon>EggDetailPage.xaml</DependentUpon>
     </Compile>
@@ -886,6 +880,7 @@
     <None Include="PokemonGo-UWP_TemporaryKey.pfx" />
   </ItemGroup>
   <ItemGroup>
+    <Content Include="Assets\UI\ash.png" />
     <Content Include="Assets\UI\avatar.png" />
     <Content Include="Assets\UI\Desert.jpg" />
     <Content Include="Assets\UI\gem.png" />
@@ -895,7 +890,7 @@
     <Content Include="Assets\UI\pokestopBG.png" />
     <Content Include="Assets\UI\poksetop.png" />
     <Content Include="Assets\UI\stardust.png" />
-    <Content Include="Assets\Warnings\1.png" />    
+	<Content Include="Assets\Warnings\1.png" />
     <Content Include="Properties\Default.rd.xml" />
     <Content Include="Assets\LockScreenLogo.scale-200.png" />
     <Content Include="Assets\SplashScreen.scale-200.png" />
@@ -909,6 +904,10 @@
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </ApplicationDefinition>
+	<Page Include="Assets\UI\Pokestop0.xaml">
+	  <Generator>MSBuild:Compile</Generator>
+	  <SubType>Designer</SubType>
+	</Page>
     <Page Include="Controls\MessageDialog\PoGoMessageDialog.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
@@ -917,6 +916,10 @@
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>
+	<Page Include="Views\Dialogs\LoadingScreen.xaml">
+	<Generator>MSBuild:Compile</Generator>
+	<SubType>Designer</SubType>
+	 </Page>
     <Page Include="Controls\MessageDialog\TextboxMessageDialog.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
@@ -934,10 +937,6 @@
       <Generator>MSBuild:Compile</Generator>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Page>
-    <Page Include="Views\Dialogs\LoadingScreen.xaml">
-      <Generator>MSBuild:Compile</Generator>
-      <SubType>Designer</SubType>
-    </Page>    
     <Page Include="Views\EggDetailPage.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
