@@ -1,0 +1,57 @@
+﻿<UserControl x:ConnectionId='1' x:Class="PokemonGo_UWP.Views.LoadingScreen"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             d:DesignHeight="300"
+             d:DesignWidth="400"
+             mc:Ignorable="d">
+
+    <RelativePanel VerticalAlignment="Stretch"
+          HorizontalAlignment="Stretch">
+
+        <RelativePanel.Background>
+            <ImageBrush x:ConnectionId='2' x:Name="BackgroundImageBrush"
+                        ImageSource="../../Assets/Warnings/1.png"
+                        Stretch="Fill"/>
+        </RelativePanel.Background>
+
+        <TextBlock x:ConnectionId='3' Margin="0,0,0,24"
+                   FontSize="20"
+                   RelativePanel.Above="LoadingProgressBar"
+                   RelativePanel.AlignHorizontalCenterWithPanel="True"
+                   TextAlignment="Center"
+                   Foreground="Black"
+                                                                                   />
+        <ProgressBar x:ConnectionId='4' x:Name="LoadingProgressBar"
+                     RelativePanel.Above="InfoMessageBorder"
+                     RelativePanel.AlignLeftWithPanel="True"
+                     RelativePanel.AlignRightWithPanel="True"
+                     Margin="24,0"
+                     Height="48"
+                                                                   
+                     Grid.Row="1"
+                     Foreground="Black" />
+
+        <Border x:ConnectionId='5' x:Name="InfoMessageBorder" 
+                RelativePanel.AlignLeftWithPanel="True"
+                RelativePanel.AlignRightWithPanel="True"
+                RelativePanel.AlignBottomWithPanel="True"
+                Background="#AAFFFFFF"
+                Height="70"
+                CornerRadius="10"
+                Margin="24">
+            <TextBlock x:ConnectionId='6' x:Name="InfoMessageTextBlock"
+                       FontSize="20"
+                       Margin="6"
+                                                                                            
+                       TextWrapping="Wrap"
+                       VerticalAlignment="Center"
+                       HorizontalAlignment="Center"
+                       TextAlignment="Center"
+                       Foreground="Black"/>
+        </Border>
+    </RelativePanel>
+
+</UserControl>
+
