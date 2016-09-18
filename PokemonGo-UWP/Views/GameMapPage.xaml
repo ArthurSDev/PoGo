@@ -242,7 +242,8 @@
         <utils:NearbyPokemonInPokedexToVisibilityConverter x:Key="NearbyPokemonInPokedexToVisibilityConverter" />
         <utils:InverseNearbyPokemonInPokedexToVisibilityConverter
             x:Key="InverseNearbyPokemonInPokedexToVisibilityConverter" />
-
+        <utils:IsIncenseActiveToPlayerIconConverter x:Key="IsIncenseActiveToPlayerIconConverter" />
+    
     </Page.Resources>
 
     <Grid>
@@ -286,12 +287,13 @@
                          Canvas.ZIndex="1"
                          x:Name="GameMapControl">
 
-            <Image Source="../Assets/UI/ash.png"
+            <Image Source="{Binding Converter={StaticResource IsIncenseActiveToPlayerIconConverter}}"
                    maps:MapControl.NormalizedAnchorPoint="0.5,1"
                    Stretch="Uniform"
                    Height="48"
                    Width="48"
                    x:Name="PlayerImage" />
+                <!-- Source="../Assets/UI/ash.png" -->
 
             <maps:MapItemsControl ItemsSource="{Binding NearbyPokestops}">
                 <maps:MapItemsControl.ItemTemplate>
