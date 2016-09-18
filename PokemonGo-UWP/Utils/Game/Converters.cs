@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
@@ -1048,6 +1048,32 @@ namespace PokemonGo_UWP.Utils
 
             // You've cleared all the reasons NOT to show it. So show it.
             return Visibility.Visible;
+        }
+
+        public object ConvertBack(object value, Type targetType, object parameter, string language)
+        {
+            return value;
+        }
+
+        #endregion
+    }
+
+    public class IsIncenseActiveToPlayerIconConverter : IValueConverter
+    {
+        #region Implementation of IValueConverter
+
+        public object Convert(object value, Type targetType, object parameter, string language)
+        {
+            var resourceUriString = "ms-appx:///Assets/UI/ash";
+           
+            if (GameClient.IsIncenseActive)
+            {
+                return new Uri(resourceUriString + "_withincense.png");
+            }
+            else
+            {
+                return new Uri(resourceUriString + ".png");
+            }
         }
 
         public object ConvertBack(object value, Type targetType, object parameter, string language)
