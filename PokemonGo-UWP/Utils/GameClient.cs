@@ -1,9 +1,21 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.Linq;
-using System.Reflection;
-using Google.Common.Geometry;
-using Google.Protobuf.Collections;
+using System.Text.RegularExpressions;
+using System.Threading;
+using System.Threading.Tasks;
+using Windows.ApplicationModel;
+using Windows.Devices.Geolocation;
+using Windows.Security.Credentials;
+using Windows.UI.Xaml;
+using PokemonGo.RocketAPI;
+using PokemonGo.RocketAPI.Console;
+using PokemonGo.RocketAPI.Enums;
+using PokemonGo.RocketAPI.Extensions;
+using PokemonGo_UWP.Entities;
+using PokemonGo_UWP.ViewModels;
 using POGOProtos.Data;
 using POGOProtos.Data.Player;
 using POGOProtos.Enums;
@@ -11,1609 +23,1084 @@ using POGOProtos.Inventory;
 using POGOProtos.Inventory.Item;
 using POGOProtos.Map.Fort;
 using POGOProtos.Map.Pokemon;
+using POGOProtos.Networking.Envelopes;
 using POGOProtos.Networking.Responses;
-using PokemonGo_UWP.Entities;
-using PokemonGo_UWP.Utils.Game;
-using Windows.Devices.Geolocation;
-using Windows.UI;
-using Windows.UI.Xaml;
-using Windows.UI.Xaml.Controls;
-using Windows.UI.Xaml.Controls.Maps;
-using Windows.UI.Xaml.Data;
-using Windows.UI.Xaml.Media;
-using Windows.UI.Xaml.Media.Imaging;
+using POGOProtos.Settings;
+using POGOProtos.Settings.Master;
+using Q42.WinRT.Data;
 using Template10.Common;
-using Windows.UI.ViewManagement;
-using Windows.Graphics.Display;
-using Windows.Foundation;
+using Template10.Utils;
+using Windows.Devices.Sensors;
+using Newtonsoft.Json;
+using PokemonGo.RocketAPI.Rpc;
+using PokemonGoAPI.Session;
+using PokemonGo_UWP.Utils.Helpers;
+using System.Collections.Specialized;
+using Windows.UI.Popups;
+using System.ComponentModel;
+using PokemonGo_UWP.Views;
 
 namespace PokemonGo_UWP.Utils
 {
-
-    public class MapZoomLevelToIconSizeConverter : IValueConverter
-    {
-        #region Implementation of IValueConverter
-
-        public object Convert(object value, Type targetType, object parameter, string language)
-        {
-            var zoomLevel = (double)value;
-            var zoomFactor = int.Parse((string)parameter);
-            return System.Convert.ToInt32(Math.Ceiling(zoomFactor * (5.02857 * zoomLevel - 53.2571)));
-        }
-
-        public object ConvertBack(object value, Type targetType, object parameter, string language)
-        {
-            return value;
-        }
-
-        #endregion
-    }
-
-    public class PokemonIdToNumericId : IValueConverter
-    {
-        #region Implementation of IValueConverter
-
-        public object Convert(object value, Type targetType, object parameter, string language)
-        {
-            if (value is PokemonId)
-                return ((int)value).ToString("D3");
-            return 0;
-        }
-
-        public object ConvertBack(object value, Type targetType, object parameter, string language)
-        {
-            return value;
-        }
-
-        #endregion
-    }
-
-    public class ItemClickEventArgsToClickedItemConverter : IValueConverter
-    {
-        #region Implementation of IValueConverter
-
-        public object Convert(object value, Type targetType, object parameter, string language)
-        {
-            ItemClickEventArgs args = (ItemClickEventArgs)value;
-            return args.ClickedItem;
-        }
-
-        public object ConvertBack(object value, Type targetType, object parameter, string language)
-        {
-            return value;
-        }
-
-        #endregion
-    }
-
-    public class PokemonIdToPokedexDescription : IValueConverter
-    {
-        #region Implementation of IValueConverter
-
-        public object Convert(object value, Type targetType, object parameter, string language)
-        {
-            var path = $"{value.ToString()}/Description";
-            var text = Resources.Pokedex.GetString(path);
-            return text;
-        }
-
-        public object ConvertBack(object value, Type targetType, object parameter, string language)
-        {
-            return value;
-        }
-
-        #endregion
-    }
-
-    public class PokemonIdToPokemonNameConverter : IValueConverter
-    {
-        #region Implementation of IValueConverter
-
-        public object Convert(object value, Type targetType, object parameter, string language)
-        {
-            return Resources.Pokemon.GetString(value.ToString());
-        }
-
-        public object ConvertBack(object value, Type targetType, object parameter, string language)
-        {
-            return value;
-        }
-
-        #endregion
-    }
-
-    public class PokemonIdToPokemonSpriteConverter : IValueConverter
-    {
-        #region Implementation of IValueConverter
-
-        public object Convert(object value, Type targetType, object parameter, string language)
-        {
-            var s = parameter as string;
-            if (s != null && s.Equals("uri"))
-                return new Uri($"ms-appx:///Assets/Pokemons/{(int)value}.png");
-            return new BitmapImage(new Uri($"ms-appx:///Assets/Pokemons/{(int)value}.png"));
-            //return new Uri($"ms-appx:///Assets/Pokemons/{(int)value}.png");
-        }
-
-        public object ConvertBack(object value, Type targetType, object parameter, string language)
-        {
-            return value;
-        }
-
-        #endregion
-    }
-
-    public class PokemonTypeTranslationConverter : IValueConverter
-    {
-        #region Implementation of IValueConverter
-
-        public object Convert(object value, Type targetType, object parameter, string language)
-        {
-            if (value == null || !(value is Enum))
-            {
-                return string.Empty;
-            }
-
-            var type = (PokemonType)value;
-            return Resources.PokemonTypes.GetString(type.ToString());
-        }
-
-        public object ConvertBack(object value, Type targetType, object parameter, string language)
-        {
-            return value;
-        }
-
-        #endregion
-    }
-
-    public class PokemonDataToCapturedGepositionConverter : IValueConverter
-    {
-        #region Implementation of IValueConverter
-
-        public object Convert(object value, Type targetType, object parameter, string language)
-        {
-            if (value == null) return new BasicGeoposition();
-            var pokemonData = (PokemonData)value;
-            // TODO: still give wrong position!
-            var cellCenter = new S2CellId(pokemonData.CapturedCellId).ChildEndForLevel(30).ToLatLng();// new S2LatLng(new S2Cell(new S2CellId(pokemonData.CapturedCellId).RangeMax).Center);
-            return new Geopoint(new BasicGeoposition() { Latitude = cellCenter.LatDegrees, Longitude = cellCenter.LngDegrees });
-        }
-
-        public object ConvertBack(object value, Type targetType, object parameter, string language)
-        {
-            return value;
-        }
-
-        #endregion
-    }
-
-    public class PokemonDataToPokemonTypeBackgroundConverter : IValueConverter
-    {
-        #region Implementation of IValueConverter
-
-        public object Convert(object value, Type targetType, object parameter, string language)
-        {
-            if (value == null) return new Uri("ms-appx:///Assets/Backgrounds/details_type_bg_normal.png");
-            var pokemonData = (PokemonDataWrapper)value;
-            return new Uri($"ms-appx:///Assets/Backgrounds/details_type_bg_{GameClient.GetExtraDataForPokemon(pokemonData.PokemonId).Type}.png");
-        }
-
-        public object ConvertBack(object value, Type targetType, object parameter, string language)
-        {
-            return value;
-        }
-
-        #endregion
-    }
-
-    public class PokemonWeightToWeightStringConverter : IValueConverter
-    {
-        #region Implementation of IValueConverter
-
-        public object Convert(object value, Type targetType, object parameter, string language)
-        {
-            if (value == null) return new Uri("ms-appx:///Assets/Backgrounds/details_type_bg_normal.png");
-            var pokemonData = (PokemonDataWrapper)value;
-            return new Uri($"ms-appx:///Assets/Backgrounds/details_type_bg_{GameClient.GetExtraDataForPokemon(pokemonData.PokemonId).Type}.png");
-        }
-
-        public object ConvertBack(object value, Type targetType, object parameter, string language)
-        {
-            return value;
-        }
-
-        #endregion
-    }
-
-    public class PokemonMoveToMoveNameConverter : IValueConverter
-    {
-        #region Implementation of IValueConverter
-
-        public object Convert(object value, Type targetType, object parameter, string language)
-        {
-            if (value == null) return string.Empty;
-            var move = (PokemonMove)value;
-            return Resources.PokemonMoves.GetString(move.ToString());
-        }
-
-        public object ConvertBack(object value, Type targetType, object parameter, string language)
-        {
-            return value;
-        }
-
-        #endregion
-    }
-
-    public class PokemonMoveToMoveTypeStringConverter : IValueConverter
-    {
-        #region Implementation of IValueConverter
-
-        public object Convert(object value, Type targetType, object parameter, string language)
-        {
-            if (value == null) return string.Empty;
-            var move = (PokemonMove)value;
-            return new PokemonTypeTranslationConverter().Convert(GameClient.MoveSettings.First(item => item.MovementId == move).PokemonType, targetType, parameter, language);
-        }
-
-        public object ConvertBack(object value, Type targetType, object parameter, string language)
-        {
-            return value;
-        }
-
-        #endregion
-    }
-
-    public class PokemonMoveToMovePowerConverter : IValueConverter
-    {
-        #region Implementation of IValueConverter
-
-        public object Convert(object value, Type targetType, object parameter, string language)
-        {
-            if (value == null) return string.Empty;
-            var move = (PokemonMove)value;
-            return GameClient.MoveSettings.First(item => item.MovementId == move).Power;
-        }
-
-        public object ConvertBack(object value, Type targetType, object parameter, string language)
-        {
-            return value;
-        }
-
-        #endregion
-    }
-
-    public class PokemonDataToMaxLevelBarConverter : IValueConverter
-    {
-        #region Implementation of IValueConverter
-
-        public object Convert(object value, Type targetType, object parameter, string language)
-        {
-            return GameClient.PlayerStats.Level + GameClient.PokemonUpgradeSettings.AllowedLevelsAbovePlayer;
-        }
-
-        public object ConvertBack(object value, Type targetType, object parameter, string language)
-        {
-            return value;
-        }
-
-        #endregion
-    }
-
-    public class PokemonDataToLevelBarConverter : IValueConverter
-    {
-        #region Implementation of IValueConverter
-
-        public object Convert(object value, Type targetType, object parameter, string language)
-        {
-            if (value == null) return 0;
-            var pokemonData = (PokemonDataWrapper)value;
-            var pokemonLevel = PokemonInfo.GetLevel(pokemonData.WrappedData);
-            return pokemonLevel > GameClient.PlayerStats.Level + 1.5 ? GameClient.PlayerStats.Level + 1.5 : pokemonLevel;
-        }
-
-        public object ConvertBack(object value, Type targetType, object parameter, string language)
-        {
-            return value;
-        }
-
-        #endregion
-    }
-
-    public class ItemIdToItemIconConverter : IValueConverter
-    {
-        #region Implementation of IValueConverter
-
-        public object Convert(object value, Type targetType, object parameter, string language)
-        {
-            var itemId = (ItemId)value;
-            return new Uri($"ms-appx:///Assets/Items/Item_{(int)itemId}.png");
-        }
-
-        public object ConvertBack(object value, Type targetType, object parameter, string language)
-        {
-            return value;
-        }
-
-        #endregion
-    }
-
-    public class ItemToItemIconConverter : IValueConverter
-    {
-        #region Implementation of IValueConverter
-
-        public object Convert(object value, Type targetType, object parameter, string language)
-        {
-            var itemId = (value as ItemAward)?.ItemId ?? ((value as ItemData)?.ItemId ?? ((ItemDataWrapper)value).ItemId);
-            return new Uri($"ms-appx:///Assets/Items/Item_{(int)itemId}.png");
-        }
-
-        public object ConvertBack(object value, Type targetType, object parameter, string language)
-        {
-            return value;
-        }
-
-        #endregion
-    }
-
-    public class PlayerTeamToTeamColorBrushConverter : IValueConverter
-    {
-        #region Implementation of IValueConverter
-
-        public object Convert(object value, Type targetType, object parameter, string language)
-        {
-            var teamColor = (TeamColor)value;
-            return new SolidColorBrush(teamColor == TeamColor.Neutral
-                ? Color.FromArgb(255, 26, 237, 213)
-                : teamColor == TeamColor.Blue ? Color.FromArgb(255, 36, 176, 253) : teamColor == TeamColor.Red ? Color.FromArgb(255, 237, 90, 90) : Color.FromArgb(255, 254, 225, 63));
-        }
-
-        public object ConvertBack(object value, Type targetType, object parameter, string language)
-        {
-            return value;
-        }
-
-        #endregion
-    }
-
-    public class PlayerTeamToTeamNameConverter : IValueConverter
-    {
-        #region Implementation of IValueConverter
-
-        public object Convert(object value, Type targetType, object parameter, string language)
-        {
-            var teamColor = (TeamColor)value;
-
-            switch (teamColor)
-            {
-                case TeamColor.Blue:
-                    return Resources.CodeResources.GetString("MysticTeamText");
-                case TeamColor.Red:
-                    return Resources.CodeResources.GetString("ValorTeamText");
-                case TeamColor.Yellow:
-                    return Resources.CodeResources.GetString("InstinctTeamText");
-                default:
-                    return Resources.CodeResources.GetString("NoTeamText");
-            }
-        }
-
-        public object ConvertBack(object value, Type targetType, object parameter, string language)
-        {
-            return value;
-        }
-
-        #endregion
-    }
-
-    public class AchievementTranslationConverter : IValueConverter
-    {
-        #region Implementation of IValueConverter
-
-        public object Convert(object value, Type targetType, object parameter, string language)
-        {
-            var achievementType = (AchievementType)value;
-            var type = achievementType.GetType();
-            var fieldInfo = type.GetField(achievementType.ToString());
-            var badgeType =
-                (BadgeTypeAttribute)fieldInfo.GetCustomAttributes(typeof(BadgeTypeAttribute), false).First();
-
-            return badgeType == null ? "" : Resources.Achievements.GetString(badgeType.Value.ToString()).ToUpper();
-        }
-
-        public object ConvertBack(object value, Type targetType, object parameter, string language)
-        {
-            return value;
-        }
-
-        #endregion
-    }
-
-    public class AchievementDescriptionTranslationConverter : IValueConverter
-    {
-        #region Implementation of IValueConverter
-
-        public object Convert(object value, Type targetType, object parameter, string language)
-        {
-            var achievementType = (KeyValuePair<AchievementType, object>)value;
-            var type = achievementType.Key.GetType();
-            var fieldInfo = type.GetField(achievementType.Key.ToString());
-            var badgeType =
-                (BadgeTypeAttribute)fieldInfo.GetCustomAttributes(typeof(BadgeTypeAttribute), false).First();
-
-            return badgeType == null ? "" : string.Format(Resources.Achievements.GetString(badgeType.Value + "Description"), new AchievementValueConverter().Convert(achievementType.Value, null, null, string.Empty));
-        }
-
-        public object ConvertBack(object value, Type targetType, object parameter, string language)
-        {
-            return value;
-        }
-
-        #endregion
-    }
-
-    public class AchievementValueToMedalImageConverter : IValueConverter
-    {
-        #region Implementation of IValueConverter
-
-        public object Convert(object value, Type targetType, object parameter, string language)
-        {
-            var achievement = (KeyValuePair<AchievementType, object>)value;
-            var type = achievement.Key.GetType();
-            var fieldInfo = type.GetField(achievement.Key.ToString());
-            var bronze = (BronzeAttribute)fieldInfo.GetCustomAttributes(typeof(BronzeAttribute), false).First();
-            var silver = (SilverAttribute)fieldInfo.GetCustomAttributes(typeof(SilverAttribute), false).First();
-            var gold = (GoldAttribute)fieldInfo.GetCustomAttributes(typeof(GoldAttribute), false).First();
-            int level = 3;
-            if (achievement.Value == null)
-            {
-                return new BitmapImage(new Uri("ms-appx:///Assets/Achievements/badge_lv0.png"));
-            }
-            if (float.Parse(achievement.Value.ToString()) < float.Parse(bronze.Value.ToString()))
-            {
-                return new BitmapImage(new Uri("ms-appx:///Assets/Achievements/badge_lv0.png"));
-            }
-            if (float.Parse(achievement.Value.ToString()) < float.Parse(gold.Value.ToString()))
-            {
-                level = 2;
-            }
-            if (float.Parse(achievement.Value.ToString()) < float.Parse(silver.Value.ToString()))
-            {
-                level = 1;
-            }
-
-            switch (achievement.Key.ToString().ToLower().Replace(" ", ""))
-            {
-                case "acetrainer":
-                case "backpacker":
-                case "battlegirl":
-                case "breeder":
-                case "collector":
-                case "fisherman":
-                case "jogger":
-                case "kanto":
-                case "pikachufan":
-                case "scientist":
-                case "youngster":
-                    return new BitmapImage(new Uri("ms-appx:///Assets/Achievements/" + achievement.Key.ToString().ToLower().Replace(" ", "") + "_lv" + level.ToString() + ".png"));
-                default:
-                    return new BitmapImage(new Uri("ms-appx:///Assets/Achievements/badge_lv" + level.ToString() + ".png"));
-            }
-        }
-
-        public object ConvertBack(object value, Type targetType, object parameter, string language)
-        {
-            return value;
-        }
-
-        #endregion
-    }
-
-    public class AchievementNextValueConverter : IValueConverter
-    {
-        private static readonly Type achievementType = typeof(AchievementType);
-
-        #region Implementation of IValueConverter
-
-        public object Convert(object value, Type targetType, object parameter, string language)
-        {
-            var achievement = (KeyValuePair<AchievementType, object>)value;
-
-            if (achievement.Value == null)
-                return 0;
-
-            var fieldInfo = achievementType.GetField(achievement.Key.ToString());
-            var achievementValueAttributes = fieldInfo.GetCustomAttributes<AchievementValueAttribute>().ToList();
-            AchievementValueAttribute achievementValue;
-            Func<string> stringConverter;
-            if (achievement.Value is float)
-            {
-                achievementValue = achievementValueAttributes.SkipWhile((x, i) => (int)x.Value < (float)achievement.Value && i < 2).First();
-                stringConverter = () => float.Parse(achievementValue.Value.ToString()).ToString("N1");
-            }
-            else if (achievement.Value is double)
-            {
-                achievementValue = achievementValueAttributes.SkipWhile((x, i) => (int)x.Value < (double)achievement.Value && i < 2).First();
-                stringConverter = () => double.Parse(achievementValue.Value.ToString()).ToString("N1");
-            }
-            else
-            {
-                achievementValue = achievementValueAttributes.SkipWhile((x, i) => (int)x.Value < int.Parse(achievement.Value.ToString()) && i < 2).First();
-                stringConverter = () => achievementValue.Value.ToString();
-            }
-            Func<int> intConverter = () => System.Convert.ToInt32(achievementValue.Value);
-
-            if (targetType == typeof(string))
-                return stringConverter();
-            if (targetType == typeof(int))
-                return intConverter();
-
-            return achievementValue.Value;
-        }
-
-        public object ConvertBack(object value, Type targetType, object parameter, string language)
-        {
-            return value;
-        }
-
-        #endregion
-    }
-
-    public class AchievementValueConverter : IValueConverter
-    {
-        #region Implementation of IValueConverter
-
-        public object Convert(object value, Type targetType, object parameter, string language)
-        {
-            if (value == null)
-            {
-                return 0;
-            }
-            if (value is float)
-            {
-                return ((float)value).ToString("N1");
-            }
-            if (value is double)
-            {
-                return ((double)value).ToString("N1");
-            }
-            return value;
-        }
-
-        public object ConvertBack(object value, Type targetType, object parameter, string language)
-        {
-            return value;
-        }
-
-        #endregion
-    }
-
-    public class AchievementToCompletedPercentageConverter : IValueConverter
-    {
-        #region Implementation of IValueConverter
-
-        public object Convert(object value, Type targetType, object parameter, string language)
-        {
-            var achievement = (KeyValuePair<AchievementType, object>)value;
-            var currentValueConverted = new AchievementValueConverter().Convert(achievement.Value, null, null, "");
-            var nextValueConverted = new AchievementNextValueConverter().Convert(achievement, null, null, "");
-            double currentValue, nextValue;
-            currentValue = currentValueConverted is string
-                ? double.Parse((string)currentValueConverted)
-                : currentValueConverted as int? ?? (byte)currentValueConverted;
-
-            nextValue = nextValueConverted is string
-                ? double.Parse((string)nextValueConverted)
-                : nextValueConverted as int? ?? (byte)nextValueConverted;
-            return currentValue / nextValue * 100;
-        }
-
-        public object ConvertBack(object value, Type targetType, object parameter, string language)
-        {
-            return value;
-        }
-
-        #endregion
-    }
-
-    public class PlayerTeamToTeamImageConverter : IValueConverter
-    {
-        #region Implementation of IValueConverter
-
-        public object Convert(object value, Type targetType, object parameter, string language)
-        {
-            var teamColor = (TeamColor)value;
-            var path = "ms-appx:///Assets/Teams/";
-
-            switch (teamColor)
-            {
-                case TeamColor.Blue:
-                    path += "mystic";
-                    break;
-                case TeamColor.Red:
-                    path += "valor";
-                    break;
-                case TeamColor.Yellow:
-                    path += "instinct";
-                    break;
-                default:
-                    path += "no-team";
-                    break;
-            }
-            path += ".png";
-
-            return new BitmapImage(new Uri(path));
-        }
-
-        public object ConvertBack(object value, Type targetType, object parameter, string language)
-        {
-            return value;
-        }
-
-        #endregion
-    }
-
-    public class PlayerTeamToTeamBackgroundImageConverter : IValueConverter
-    {
-        #region Implementation of IValueConverter
-
-        public object Convert(object value, Type targetType, object parameter, string language)
-        {
-            var teamColor = (TeamColor)value;
-            var path = "ms-appx:///Assets/Teams/";
-
-            switch (teamColor)
-            {
-                case TeamColor.Blue:
-                    path += "mystic";
-                    break;
-                case TeamColor.Red:
-                    path += "valor";
-                    break;
-                case TeamColor.Yellow:
-                    path += "instinct";
-                    break;
-                default:
-                    return null;
-            }
-            path += ".png";
-
-            return new BitmapImage(new Uri(path));
-        }
-
-        public object ConvertBack(object value, Type targetType, object parameter, string language)
-        {
-            return value;
-        }
-
-        #endregion
-    }
-
-    public class PlayerStatsTranslationConverter : IValueConverter
-    {
-        #region Implementation of IValueConverter
-
-        public object Convert(object value, Type targetType, object parameter, string language)
-        {
-            return Resources.CodeResources.GetString((string)value);
-        }
-
-        public object ConvertBack(object value, Type targetType, object parameter, string language)
-        {
-            return value;
-        }
-
-        #endregion
-    }
-
-    public class EncounterBackgroundToBackgroundImageConverter : IValueConverter
-    {
-        #region Implementation of IValueConverter
-
-        public object Convert(object value, Type targetType, object parameter, string language)
-        {
-            return new Uri($"ms-appx:///Assets/Backgrounds/{(EncounterResponse.Types.Background)value}.png");
-        }
-
-        public object ConvertBack(object value, Type targetType, object parameter, string language)
-        {
-            return value;
-        }
-
-        #endregion
-    }
-
-    public class ItemToItemNameConverter : IValueConverter
-    {
-        #region Implementation of IValueConverter
-
-        public object Convert(object value, Type targetType, object parameter, string language)
-        {
-            var itemId = (value as ItemAward)?.ItemId ?? ((value as ItemData)?.ItemId ?? ((ItemDataWrapper)value).ItemId);
-            return Resources.Items.GetString(itemId.ToString());
-        }
-
-        public object ConvertBack(object value, Type targetType, object parameter, string language)
-        {
-            return value;
-        }
-
-        #endregion
-    }
-
-    public class ItemToItemDescriptionConverter : IValueConverter
-    {
-        #region Implementation of IValueConverter
-
-        public object Convert(object value, Type targetType, object parameter, string language)
-        {
-            var itemId = (value as ItemAward)?.ItemId ?? ((value as ItemData)?.ItemId ?? ((ItemDataWrapper)value).ItemId);
-            return Resources.Items.GetString("D_" + itemId);
-        }
-
-        public object ConvertBack(object value, Type targetType, object parameter, string language)
-        {
-            return value;
-        }
-
-        #endregion
-    }
-
-    public class ItemToItemRecycleVisibilityConverter : IValueConverter
-    {
-        #region Implementation of IValueConverter
-
-        public object Convert(object value, Type targetType, object parameter, string language)
-        {
-            var itemId = (value as ItemAward)?.ItemId ?? ((value as ItemData)?.ItemId ?? ((ItemDataWrapper)value).ItemId);
-            switch(itemId)
-            {
-                case ItemId.ItemUnknown:
-                case ItemId.ItemSpecialCamera:
-                case ItemId.ItemIncubatorBasicUnlimited:
-                case ItemId.ItemIncubatorBasic:
-                    return Visibility.Collapsed;
-                default:
-                    return Visibility.Visible;
-            }
-        }
-
-        public object ConvertBack(object value, Type targetType, object parameter, string language)
-        {
-            return value;
-        }
-
-        #endregion
-    }
-
-    public class ItemUseabilityToOpacityConverter : DependencyObject, IValueConverter
-    {
-        public ViewModels.ItemsInventoryPageViewModel.ItemsInventoryViewMode CurrentViewMode
-        {
-            get { return (ViewModels.ItemsInventoryPageViewModel.ItemsInventoryViewMode)GetValue(CurrentViewModeProperty); }
-            set { SetValue(CurrentViewModeProperty, value); }
-        }
-
-        public static readonly DependencyProperty CurrentViewModeProperty =
-            DependencyProperty.Register("CurrentViewMode",
-                                        typeof(ViewModels.ItemsInventoryPageViewModel.ItemsInventoryViewMode),
-                                        typeof(ItemUseabilityToOpacityConverter),
-                                        new PropertyMetadata(null));
-
-        #region Implementation of IValueConverter
-
-        public object Convert(object value, Type targetType, object parameter, string language)
-        {
-            if (!(value is ItemDataWrapper)) return 1;
-            
-            var useableList = CurrentViewMode == ViewModels.ItemsInventoryPageViewModel.ItemsInventoryViewMode.Normal ? GameClient.NormalUseItemIds : GameClient.CatchItemIds;
-            return useableList.Contains(((ItemDataWrapper)value).ItemId) ? 1 : 0.5;
-        }
-
-        public object ConvertBack(object value, Type targetType, object parameter, string language)
-        {
-            return value;
-        }
-
-        #endregion
-    }
-
-    public class CaptureXpToTotalCaptureXpConverter : IValueConverter
-    {
-        #region Implementation of IValueConverter
-
-        public object Convert(object value, Type targetType, object parameter, string language)
-        {
-            var xp = (RepeatedField<int>)value;
-            return xp.Sum();
-        }
-
-        public object ConvertBack(object value, Type targetType, object parameter, string language)
-        {
-            return value;
-        }
-
-        #endregion
-    }
-
-    public class ActivityTypeToActivityNameConverter : IValueConverter
-    {
-        #region Implementation of IValueConverter
-
-        public object Convert(object value, Type targetType, object parameter, string language)
-        {
-            var activityType = (ActivityType)value;
-            var resActivityType = Resources.CodeResources.GetString(activityType.ToString()); ;
-            return string.IsNullOrEmpty(resActivityType) ? activityType.ToString().Replace("Activity", "") : resActivityType;
-        }
-
-        public object ConvertBack(object value, Type targetType, object parameter, string language)
-        {
-            return value;
-        }
-
-        #endregion
-    }
-
     /// <summary>
-    ///     Converts a generic map object to its coordinates (Geopoint).
-    ///     Converter parameter tells if we're converting a MapPokemon or a FortData
+    ///     Static class containing game's state and wrapped client methods to update data
     /// </summary>
-    public class MapObjectToGeopointConverter : IValueConverter
+    public static class GameClient
     {
-        #region Implementation of IValueConverter
+        #region Client Vars
 
-        public object Convert(object value, Type targetType, object parameter, string language)
+        private static ISettings _clientSettings;
+        private static Client _client;
+
+        /// <summary>
+        /// Handles map updates using Niantic's logic.
+        /// Ported from <seealso cref="https://github.com/AeonLucid/POGOLib"/>
+        /// </summary>
+        private class Heartbeat
         {
-            var objectType = (string)parameter;
-            var geoposition = new BasicGeoposition();
-            if (objectType.Equals("pokemon"))
+            /// <summary>
+            ///     Determines whether we can keep heartbeating.
+            /// </summary>
+            private bool _keepHeartbeating = true;
+
+            /// <summary>
+            /// Timer used to update map
+            /// </summary>
+            private DispatcherTimer _mapUpdateTimer;
+
+            /// <summary>
+            /// True if another update operation is in progress.
+            /// </summary>
+            private bool _isHeartbeating;
+
+            /// <summary>
+            /// Checks if we need to update data
+            /// </summary>
+            /// <param name="sender"></param>
+            /// <param name="o"></param>
+            private async void HeartbeatTick(object sender, object o)
             {
-                var pokemon = (MapPokemon)value;
-                geoposition.Latitude = pokemon.Latitude;
-                geoposition.Longitude = pokemon.Longitude;
+                // We need to skip this iteration
+                if (!_keepHeartbeating || _isHeartbeating) return;
+                _isHeartbeating = true;
+                // Heartbeat is alive so we check if we need to update data, based on GameSettings
+                var canRefresh = false;
+
+
+                //Collect location data for signature
+                DeviceInfos.Current.CollectLocationData();
+
+                // We have no settings yet so we just update without further checks
+                if (GameSetting == null)
+                {
+                    canRefresh = true;
+                }
+                else
+                {
+                    // Check if we need to update
+                    var minSeconds = GameSetting.MapSettings.GetMapObjectsMinRefreshSeconds;
+                    var maxSeconds = GameSetting.MapSettings.GetMapObjectsMaxRefreshSeconds;
+                    var minDistance = GameSetting.MapSettings.GetMapObjectsMinDistanceMeters;
+                    var lastGeoCoordinate = _lastGeopositionMapObjectsRequest;
+                    var secondsSinceLast = DateTime.Now.Subtract(BaseRpc.LastRpcRequest).Seconds;
+                    if (lastGeoCoordinate == null)
+                    {
+                        Logger.Write("Refreshing MapObjects, reason: 'lastGeoCoordinate == null'.");
+                        canRefresh = true;
+                    }
+                    else if (secondsSinceLast >= minSeconds)
+                    {
+                        var metersMoved = GeoHelper.Distance(LocationServiceHelper.Instance.Geoposition.Coordinate.Point, lastGeoCoordinate.Coordinate.Point);
+                        if (secondsSinceLast >= maxSeconds)
+                        {
+                            Logger.Write($"Refreshing MapObjects, reason: 'secondsSinceLast({secondsSinceLast}) >= maxSeconds({maxSeconds})'.");
+                            canRefresh = true;
+                        }
+                        else if (metersMoved >= minDistance)
+                        {
+                            Logger.Write($"Refreshing MapObjects, reason: 'metersMoved({metersMoved}) >= minDistance({minDistance})'.");
+                            canRefresh = true;
+                        }
+                    }
+                }
+                // Update!
+                if (!canRefresh)
+                {
+                    _isHeartbeating = false;
+                    return;
+                }
+                try
+                {
+                    await UpdateMapObjects();
+                }
+                catch (Exception ex)
+                {
+                    await ExceptionHandler.HandleException(ex);
+                }
+                finally
+                {
+                    _isHeartbeating = false;
+                }
             }
-            else if (objectType.Equals("pokestop"))
+
+            /// <summary>
+            /// Inits heartbeat
+            /// </summary>
+            internal async Task StartDispatcher()
             {
-                var pokestop = (FortData)value;
-                geoposition.Latitude = pokestop.Latitude;
-                geoposition.Longitude = pokestop.Longitude;
+                _keepHeartbeating = true;
+                if (_mapUpdateTimer != null) return;
+
+                await DispatcherHelper.RunInDispatcherAndAwait(() =>
+                {
+                    _mapUpdateTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+                    _mapUpdateTimer.Tick += HeartbeatTick;
+                    _mapUpdateTimer.Start();
+                });
             }
-            return new Geopoint(geoposition);
-        }
 
-        public object ConvertBack(object value, Type targetType, object parameter, string language)
-        {
-            return value;
-        }
-
-        #endregion
-    }
-
-    public class PokemonFamilyToCandyImageConverter : IValueConverter
-    {
-        #region Implementation of IValueConverter
-
-        public object Convert(object value, Type targetType, object parameter, string language)
-        {
-            if (value == null) return "";
-            var pokemonType = (PokemonType)value;
-            return $"ms-appx:///Assets/Candy/{pokemonType}.png";
-        }
-
-        public object ConvertBack(object value, Type targetType, object parameter, string language)
-        {
-            return value;
-        }
-
-        #endregion
-    }
-
-    public class InverseVisibleWhenTypeIsNotNoneConverter : IValueConverter
-    {
-        #region Implementation of IValueConverter
-
-        public object Convert(object value, Type targetType, object parameter, string language)
-        {
-            if (value == null) return Visibility.Collapsed;
-            var pokemonType = (PokemonType)value;
-            return pokemonType != PokemonType.None ? Visibility.Collapsed : Visibility.Visible;
-        }
-
-        public object ConvertBack(object value, Type targetType, object parameter, string language)
-        {
-            return value;
-        }
-
-        #endregion
-    }
-
-    public class VisibleWhenTypeIsNotNoneConverter : IValueConverter
-    {
-        #region Implementation of IValueConverter
-
-        public object Convert(object value, Type targetType, object parameter, string language)
-        {
-            if (value == null) return Visibility.Collapsed;
-            var pokemonType = (PokemonType)value;
-            return pokemonType == PokemonType.None ? Visibility.Collapsed : Visibility.Visible;
-        }
-
-        public object ConvertBack(object value, Type targetType, object parameter, string language)
-        {
-            return value;
-        }
-
-        #endregion
-    }
-
-    public class PokemonFamilyNameToStringConverter : IValueConverter
-    {
-        #region Implementation of IValueConverter
-
-        public object Convert(object value, Type targetType, object parameter, string language)
-        {
-            if (value == null) return "";
-            var pokemonFamily = (PokemonFamilyId)value;
-            return Resources.Pokemon.GetString(pokemonFamily.ToString().Replace("Family", "")).ToUpperInvariant();
-        }
-
-        public object ConvertBack(object value, Type targetType, object parameter, string language)
-        {
-            return value;
-        }
-
-        #endregion
-    }
-
-    public class PokemonDataToVisibilityConverter : IValueConverter
-    {
-        #region Implementation of IValueConverter
-
-        public object Convert(object value, Type targetType, object parameter, string language)
-        {
-            return (PokemonData)value != null ? Visibility.Visible : Visibility.Collapsed;
-        }
-
-        public object ConvertBack(object value, Type targetType, object parameter, string language)
-        {
-            return value;
-        }
-
-        #endregion
-    }
-
-    public class NearbyPokemonDistanceToDistanceImageConverter : IValueConverter
-    {
-        #region Implementation of IValueConverter
-
-        public object Convert(object value, Type targetType, object parameter, string language)
-        {
-            var distance = (int)(float)value;
-            var distanceString = distance < 125 ? (distance < 70 ? "Near" : "Mid") : "Far";
-            return new Uri($"ms-appx:///Assets/Icons/Footprint_{distanceString}.png");
-        }
-
-        public object ConvertBack(object value, Type targetType, object parameter, string language)
-        {
-            return value;
-        }
-
-        #endregion
-    }
-
-    public class InverseNearbyPokemonInPokedexToVisibilityConverter : IValueConverter
-    {
-        #region Implementation of IValueConverter
-
-        public object Convert(object value, Type targetType, object parameter, string language)
-        {
-            if (value == null) return Visibility.Collapsed;
-            // Get the Pokemon passed in. If it's null, you can't see the real deal.
-            var pokemon = (PokemonId)value;
-
-            // Get the Pokedex entry for this Pokemon. If it's null, you can't see the real deal.
-            var entry = GameClient.PokedexInventory.FirstOrDefault(c => c.PokemonId == pokemon);
-            if (entry == null) return Visibility.Visible;
-
-            // Get the Pokedex entry for this Pokemon. If it's null, you can't see the real deal.
-            if (entry.TimesCaptured == 0) return Visibility.Visible;
-
-            // You've cleared all the reasons NOT to show it. So show it.
-            return Visibility.Collapsed;
-        }
-
-        public object ConvertBack(object value, Type targetType, object parameter, string language)
-        {
-            return value;
-        }
-
-        #endregion
-    }
-
-    public class NearbyPokemonInPokedexToVisibilityConverter : IValueConverter
-    {
-        #region Implementation of IValueConverter
-
-        public object Convert(object value, Type targetType, object parameter, string language)
-        {
-            if (value == null) return Visibility.Collapsed;
-            // Get the Pokemon passed in. If it's null, you can't see the real deal.
-            var pokemon = (PokemonId)value;
-
-            // Get the Pokedex entry for this Pokemon. If it's null, you can't see the real deal.
-            var entry = GameClient.PokedexInventory.FirstOrDefault(c => c.PokemonId == pokemon);
-            if (entry == null) return Visibility.Collapsed;
-
-            // Get the Pokedex entry for this Pokemon. If it's null, you can't see the real deal.
-            if (entry.TimesCaptured == 0) return Visibility.Collapsed;
-
-            // You've cleared all the reasons NOT to show it. So show it.
-            return Visibility.Visible;
-        }
-
-        public object ConvertBack(object value, Type targetType, object parameter, string language)
-        {
-            return value;
-        }
-
-        #endregion
-    }
-
-    public class IsIncenseActiveToPlayerIconConverter : IValueConverter
-    {
-        #region Implementation of IValueConverter
-
-        public object Convert(object value, Type targetType, object parameter, string language)
-        {
-            var resourceUriString = "ms-appx:///Assets/UI/ash";
-           
-            if (GameClient.IsIncenseActive)
+            /// <summary>
+            /// Stops heartbeat
+            /// </summary>
+            internal void StopDispatcher()
             {
-                return new Uri(resourceUriString + "_withincense.png");
+                _keepHeartbeating = false;
             }
+        }
+        #endregion
+
+        #region Game Vars
+
+        /// <summary>
+        ///     App's current version
+        /// </summary>
+        public static string CurrentVersion
+        {
+            get
+            {
+                var currentVersion = Package.Current.Id.Version;
+                return $"v{currentVersion.Major}.{currentVersion.Minor}.{currentVersion.Build}";
+            }
+        }
+
+        /// <summary>
+        ///     Settings downloaded from server
+        /// </summary>
+        public static GlobalSettings GameSetting { get; private set; }
+
+        /// <summary>
+        ///     Player's profile, we use it just for the username
+        /// </summary>
+        public static PlayerData PlayerProfile { get; private set; }
+
+        /// <summary>
+        ///     Stats for the current player, including current level and experience related stuff
+        /// </summary>
+        public static PlayerStats PlayerStats { get; private set; }
+
+        /// <summary>
+        ///     Contains infos about level up rewards
+        /// </summary>
+        public static InventoryDelta InventoryDelta { get; private set; }
+
+        #region Collections
+
+        /// <summary>
+        ///     Collection of Pokemon in 1 step from current position
+        /// </summary>
+        public static ObservableCollection<MapPokemonWrapper> CatchablePokemons { get; set; } =
+            new ObservableCollection<MapPokemonWrapper>();
+
+        /// <summary>
+        ///     Collection of Pokemon in 2 steps from current position
+        /// </summary>
+        public static ObservableCollection<NearbyPokemonWrapper> NearbyPokemons { get; set; } =
+            new ObservableCollection<NearbyPokemonWrapper>();
+
+        /// <summary>
+        ///     Collection of lured Pokemon
+        /// </summary>
+        public static ObservableCollection<LuredPokemon> LuredPokemons { get; set; } = new ObservableCollection<LuredPokemon>();
+
+        /// <summary>
+        ///     Collection of Pokestops in the current area
+        /// </summary>
+        public static ObservableCollection<FortDataWrapper> NearbyPokestops { get; set; } =
+            new ObservableCollection<FortDataWrapper>();
+
+        /// <summary>
+        ///     Collection of Gyms in the current area
+        /// </summary>
+        public static ObservableCollection<FortDataWrapper> NearbyGyms { get; set; } =
+            new ObservableCollection<FortDataWrapper>();
+
+        /// <summary>
+        ///     Stores Items in the current inventory
+        /// </summary>
+        public static ObservableCollection<ItemData> ItemsInventory { get; set; } = new ObservableCollection<ItemData>()
+            ;
+
+        /// <summary>
+        ///     Stores Items that can be used to catch a Pokemon
+        /// </summary>
+        public static ObservableCollection<ItemData> CatchItemsInventory { get; set; } =
+            new ObservableCollection<ItemData>();
+
+        /// <summary>
+        ///     Stores free Incubators in the current inventory
+        /// </summary>
+        public static ObservableCollection<EggIncubator> FreeIncubatorsInventory { get; set; } =
+            new ObservableCollection<EggIncubator>();
+
+        /// <summary>
+        ///     Stores used Incubators in the current inventory
+        /// </summary>
+        public static ObservableCollection<EggIncubator> UsedIncubatorsInventory { get; set; } =
+            new ObservableCollection<EggIncubator>();
+
+        /// <summary>
+        ///     Stores Pokemons in the current inventory
+        /// </summary>
+        public static ObservableCollectionPlus<PokemonData> PokemonsInventory { get; set; } =
+            new ObservableCollectionPlus<PokemonData>();
+
+        /// <summary>
+        ///     Stores Eggs in the current inventory
+        /// </summary>
+        public static ObservableCollection<PokemonData> EggsInventory { get; set; } =
+            new ObservableCollection<PokemonData>();
+
+        /// <summary>
+        ///     Stores player's current Pokedex
+        /// </summary>
+        public static ObservableCollectionPlus<PokedexEntry> PokedexInventory { get; set; } =
+            new ObservableCollectionPlus<PokedexEntry>();
+
+        /// <summary>
+        ///     Stores player's current candies
+        /// </summary>
+        public static ObservableCollection<Candy> CandyInventory { get; set; } = new ObservableCollection<Candy>();
+
+        #endregion
+
+        #region Templates from server
+
+        /// <summary>
+        ///     Stores extra useful data for the Pokedex, like Pokemon type and other stuff that is missing from PokemonData
+        /// </summary>
+        public static IEnumerable<PokemonSettings> PokemonSettings { get; private set; } = new List<PokemonSettings>();
+
+        /// <summary>
+        ///     Stores upgrade costs (candy, stardust) per each level
+        /// </summary>
+        //public static Dictionary<int, object[]> PokemonUpgradeCosts { get; private set; } = new Dictionary<int, object[]>();
+
+        /// <summary>
+        /// Upgrade settings per each level
+        /// </summary>
+        public static PokemonUpgradeSettings PokemonUpgradeSettings { get; private set; }
+
+        /// <summary>
+        ///     Stores data about Pokemon moves
+        /// </summary>
+        public static IEnumerable<MoveSettings> MoveSettings { get; private set; } = new List<MoveSettings>();
+
+        #endregion
+
+        #endregion
+
+        #region Constructor
+
+        static GameClient()
+        {
+            PokedexInventory.CollectionChanged += PokedexInventory_CollectionChanged;
+            // TODO: Investigate whether or not this needs to be unsubscribed when the app closes.
+        }
+
+        /// <summary>
+        /// When new items are added to the Pokedex, reset the Nearby Pokemon so their state can be re-run.
+        /// </summary>
+        /// <remarks>
+        /// This exists because the Nearby Pokemon are Map objects, and are loaded before Inventory. If you don't do this,
+        /// the first Nearby items are always shown as "new to the Pokedex" until they disappear, regardless of if they are
+        /// ACTUALLY new.
+        /// </remarks>
+        private static void PokedexInventory_CollectionChanged(object sender, NotifyCollectionChangedEventArgs e)
+        {
+            if (e.Action == NotifyCollectionChangedAction.Add)
+            {
+                // advancedrei: This is a total order-of-operations hack.
+                var nearby = NearbyPokemons.ToList();
+                NearbyPokemons.Clear();
+                NearbyPokemons.AddRange(nearby);
+            }
+        }
+
+        #endregion
+
+        #region Game Logic
+
+        #region Login/Logout
+
+        /// <summary>
+        /// Saves the new AccessToken to settings.
+        /// </summary>
+        private static void SaveAccessToken()
+        {
+            SettingsService.Instance.AccessTokenString = JsonConvert.SerializeObject(_client.AccessToken);
+        }
+
+        /// <summary>
+        /// Loads current AccessToken
+        /// </summary>
+        /// <returns></returns>
+        public static AccessToken LoadAccessToken()
+        {
+            var tokenString = SettingsService.Instance.AccessTokenString;
+            return tokenString == null ? null : JsonConvert.DeserializeObject<AccessToken>(SettingsService.Instance.AccessTokenString);
+        }
+
+        /// <summary>
+        ///     Sets things up if we didn't come from the login page
+        /// </summary>
+        /// <returns></returns>
+        public static async Task InitializeClient()
+        {
+
+            DataCache.Init();
+
+            var credentials = SettingsService.Instance.UserCredentials;
+            credentials.RetrievePassword();
+            _clientSettings = new Settings
+            {
+                AuthType = SettingsService.Instance.LastLoginService,
+                PtcUsername = SettingsService.Instance.LastLoginService == AuthType.Ptc ? credentials.UserName : null,
+                PtcPassword = SettingsService.Instance.LastLoginService == AuthType.Ptc ? credentials.Password : null,
+                GoogleUsername = SettingsService.Instance.LastLoginService == AuthType.Google ? credentials.UserName : null,
+                GooglePassword = SettingsService.Instance.LastLoginService == AuthType.Google ? credentials.Password : null,
+            };
+
+            _client = new Client(_clientSettings, null, DeviceInfos.Current) {AccessToken = LoadAccessToken()};
+            var apiFailureStrategy = new ApiFailureStrategy(_client);
+            _client.ApiFailure = apiFailureStrategy;
+            // Register to AccessTokenChanged
+            apiFailureStrategy.OnAccessTokenUpdated += (s, e) => SaveAccessToken();
+            apiFailureStrategy.OnFailureToggleUpdateTimer += ToggleUpdateTimer;
+            try
+            {
+                await _client.Login.DoLogin();
+            }
+            catch (Exception e)
+            {
+                if (e is PokemonGo.RocketAPI.Exceptions.AccessTokenExpiredException)
+                {
+                    Debug.WriteLine("AccessTokenExpired Exception caught");
+                    _client.AccessToken.Expire();
+                    await _client.Login.DoLogin();
+                }
+                else
+                {
+                    await new MessageDialog(e.Message).ShowAsyncQueue();
+                }
+            }
+        }
+
+        /// <summary>
+        ///     Starts a PTC session for the given user
+        /// </summary>
+        /// <param name="username"></param>
+        /// <param name="password"></param>
+        /// <returns>true if login worked</returns>
+        public static async Task<bool> DoPtcLogin(string username, string password)
+        {
+            _clientSettings = new Settings
+            {
+                PtcUsername = username,
+                PtcPassword = password,
+                AuthType = AuthType.Ptc
+            };
+            _client = new Client(_clientSettings, null, DeviceInfos.Current);
+            var apiFailureStrategy = new ApiFailureStrategy(_client);
+            _client.ApiFailure = apiFailureStrategy;
+            // Register to AccessTokenChanged
+            apiFailureStrategy.OnAccessTokenUpdated += (s, e) => SaveAccessToken();
+            // Get PTC token
+            await _client.Login.DoLogin();
+            // Update current token even if it's null and clear the token for the other identity provide
+            SaveAccessToken();
+            // Update other data if login worked
+            if (_client.AccessToken == null) return false;
+            SettingsService.Instance.LastLoginService = AuthType.Ptc;
+            SettingsService.Instance.UserCredentials =
+                new PasswordCredential(nameof(SettingsService.Instance.UserCredentials), username, password);
+            // Return true if login worked, meaning that we have a token
+            return true;
+        }
+
+        /// <summary>
+        ///     Starts a Google session for the given user
+        /// </summary>
+        /// <param name="email"></param>
+        /// <param name="password"></param>
+        /// <returns>true if login worked</returns>
+        public static async Task<bool> DoGoogleLogin(string email, string password)
+        {
+            _clientSettings = new Settings
+            {
+                GoogleUsername = email,
+                GooglePassword = password,
+                AuthType = AuthType.Google
+            };
+
+            _client = new Client(_clientSettings, null, DeviceInfos.Current);
+            var apiFailureStrategy = new ApiFailureStrategy(_client);
+            _client.ApiFailure = apiFailureStrategy;
+            // Register to AccessTokenChanged
+            apiFailureStrategy.OnAccessTokenUpdated += (s, e) => SaveAccessToken();
+            // Get Google token
+            await _client.Login.DoLogin();
+            // Update current token even if it's null and clear the token for the other identity provide
+            SaveAccessToken();
+            // Update other data if login worked
+            if (_client.AccessToken == null) return false;
+            SettingsService.Instance.LastLoginService = AuthType.Google;
+            SettingsService.Instance.UserCredentials =
+                new PasswordCredential(nameof(SettingsService.Instance.UserCredentials), email, password);
+            // Return true if login worked, meaning that we have a token
+            return true;
+        }
+
+        /// <summary>
+        ///     Logs the user out by clearing data and timers
+        /// </summary>
+        public static void DoLogout()
+        {
+            // Clear stored token
+            SettingsService.Instance.AccessTokenString = null;
+            if (!SettingsService.Instance.RememberLoginData)
+                SettingsService.Instance.UserCredentials = null;
+            _heartbeat?.StopDispatcher();
+			LocationServiceHelper.Instance.PropertyChanged -= LocationHelperPropertyChanged;
+			_lastGeopositionMapObjectsRequest = null;
+        }
+
+        #endregion
+
+        #region Data Updating
+        private static Compass _compass;
+
+        private static Heartbeat _heartbeat;
+
+        public static event EventHandler<GetHatchedEggsResponse> OnEggHatched;
+
+        #region Compass Stuff
+        /// <summary>
+        /// We fire this event when the current compass position changes
+        /// </summary>
+        public static event EventHandler<CompassReading> HeadingUpdated;
+        private static void compass_ReadingChanged(Compass sender, CompassReadingChangedEventArgs args)
+        {
+            HeadingUpdated?.Invoke(sender, args.Reading);
+        }
+        #endregion
+        /// <summary>
+        ///     Starts the timer to update map objects and the handler to update position
+        /// </summary>
+        public static async Task InitializeDataUpdate()
+        {
+            #region Compass management
+            SettingsService.Instance.PropertyChanged += (object sender, PropertyChangedEventArgs e) =>
+            {
+                if (e.PropertyName == nameof(SettingsService.Instance.MapAutomaticOrientationMode))
+                {
+                    switch (SettingsService.Instance.MapAutomaticOrientationMode)
+                    {
+                        case MapAutomaticOrientationModes.Compass:
+                            _compass = Compass.GetDefault();
+                            _compass.ReportInterval = Math.Max(_compass.MinimumReportInterval, 50);
+                            _compass.ReadingChanged += compass_ReadingChanged;
+                            break;
+                        case MapAutomaticOrientationModes.None:
+                        case MapAutomaticOrientationModes.GPS:
+                        default:
+                            if (_compass != null)
+                            {
+                                _compass.ReadingChanged -= compass_ReadingChanged;
+                                _compass = null;
+                            }
+                            break;
+                    }
+                }
+            };
+            //Trick to trigger the PropertyChanged for MapAutomaticOrientationMode ;)
+            SettingsService.Instance.MapAutomaticOrientationMode = SettingsService.Instance.MapAutomaticOrientationMode;
+			#endregion
+      Busy.SetBusy(true, Resources.CodeResources.GetString("GettingGpsSignalText"));
+			await LocationServiceHelper.Instance.InitializeAsync();
+			LocationServiceHelper.Instance.PropertyChanged += LocationHelperPropertyChanged;
+			// Before starting we need game settings
+			GameSetting =
+                await
+                    DataCache.GetAsync(nameof(GameSetting), async () => (await _client.Download.GetSettings()).Settings,
+                        DateTime.Now.AddMonths(1));
+            // Update geolocator settings based on server
+            LocationServiceHelper.Instance.UpdateMovementThreshold(GameSetting.MapSettings.GetMapObjectsMinDistanceMeters);
+            if (_heartbeat == null)
+                _heartbeat = new Heartbeat();
+            await _heartbeat.StartDispatcher();
+            // Update before starting timer
+            Busy.SetBusy(true, Resources.CodeResources.GetString("GettingUserDataText"));
+            //await UpdateMapObjects();
+            await UpdateInventory();
+            await UpdateItemTemplates();
+            if(PlayerProfile != null && PlayerStats != null)
+                Busy.SetBusy(false);
+        }
+
+		private static async void LocationHelperPropertyChanged(object sender, PropertyChangedEventArgs e)
+		{
+			if(e.PropertyName==nameof(LocationServiceHelper.Instance.Geoposition))
+			{
+				// Updating player's position
+				var position = LocationServiceHelper.Instance.Geoposition.Coordinate.Point.Position;
+				if (_client != null)
+					await _client.Player.UpdatePlayerLocation(position.Latitude, position.Longitude, LocationServiceHelper.Instance.Geoposition.Coordinate.Accuracy);
+			}
+		}
+
+        /// <summary>
+        ///     DateTime for the last map update
+        /// </summary>
+        private static DateTime _lastUpdate;
+
+        /// <summary>
+        ///     Toggles the update timer based on the isEnabled value
+        /// </summary>
+        /// <param name="isEnabled"></param>
+        public static async void ToggleUpdateTimer(bool isEnabled = true)
+        {
+            Logger.Write($"Called ToggleUpdateTimer({isEnabled})");
+            if (isEnabled)
+                await _heartbeat.StartDispatcher();
             else
             {
-                return new Uri(resourceUriString + ".png");
+                _heartbeat.StopDispatcher();
             }
         }
 
-        public object ConvertBack(object value, Type targetType, object parameter, string language)
+        /// <summary>
+        ///     Updates catcheable and nearby Pokemons + Pokestops.
+        ///     We're using a single method so that we don't need two separate calls to the server, making things faster.
+        /// </summary>
+        /// <returns></returns>
+        private static async Task UpdateMapObjects()
         {
-            return value;
-        }
+            // Get all map objects from server
+            var mapObjects = await GetMapObjects(LocationServiceHelper.Instance.Geoposition);
+            _lastUpdate = DateTime.Now;
 
-        #endregion
-    }
+            // update catchable pokemons
+            var newCatchablePokemons = mapObjects.Item1.MapCells.SelectMany(x => x.CatchablePokemons).Select(item => new MapPokemonWrapper(item)).ToArray();
+            Logger.Write($"Found {newCatchablePokemons.Length} catchable pokemons");
+            CatchablePokemons.UpdateWith(newCatchablePokemons, x => x,
+                (x, y) => x.EncounterId == y.EncounterId);
 
-    public class PokestopToIconConverter : IValueConverter
-    {
-        #region Implementation of IValueConverter
+            // update nearby pokemons
+            var newNearByPokemons = mapObjects.Item1.MapCells.SelectMany(x => x.NearbyPokemons).ToArray();
+            Logger.Write($"Found {newNearByPokemons.Length} nearby pokemons");
+            // for this collection the ordering is important, so we follow a slightly different update mechanism
+            NearbyPokemons.UpdateByIndexWith(newNearByPokemons, x => new NearbyPokemonWrapper(x));
 
-        public object Convert(object value, Type targetType, object parameter, string language)
-        {
-            var fortDataStatus = (FortDataStatus)value;
-            var resourceUriString = "ms-appx:///Assets/Icons/pokestop_";
+            // update poke stops on map
+            var newPokeStops = mapObjects.Item1.MapCells
+                .SelectMany(x => x.Forts)
+                .Where(x => x.Type == FortType.Checkpoint)
+                .ToArray();
+            Logger.Write($"Found {newPokeStops.Length} nearby PokeStops");
+            NearbyPokestops.UpdateWith(newPokeStops, x => new FortDataWrapper(x), (x, y) => x.Id == y.Id);
 
-            switch (fortDataStatus)
+            // update gyms on map
+            var newGyms = mapObjects.Item1.MapCells
+                .SelectMany(x => x.Forts)
+                .Where(x => x.Type == FortType.Gym)
+                .ToArray();
+            Logger.Write($"Found {newGyms.Length} nearby Gyms");
+            // For now, we do not show the gyms on the map, as they are not complete yet. Code remains, so we can still work on it.
+            //NearbyGyms.UpdateWith(newGyms, x => new FortDataWrapper(x), (x, y) => x.Id == y.Id);
+
+            // Update LuredPokemon
+            var newLuredPokemon = newPokeStops.Where(item => item.LureInfo != null).Select(item => new LuredPokemon(item.LureInfo, item.Latitude, item.Longitude)).ToArray();
+            Logger.Write($"Found {newLuredPokemon.Length} lured Pokemon");
+            LuredPokemons.UpdateByIndexWith(newLuredPokemon, x => x);
+            Logger.Write("Finished updating map objects");
+
+            // Update Hatched Eggs
+            var hatchedEggResponse = mapObjects.Item2;
+            if (hatchedEggResponse.Success)
             {
-                case FortDataStatus.Opened:
-                    return new Uri(resourceUriString + "near.png");
-                case FortDataStatus.Closed:
-                    return new Uri(resourceUriString + "far.png");
-                case FortDataStatus.Opened | FortDataStatus.Cooldown:
-                    return new Uri(resourceUriString + "near_inactive.png");
-                case FortDataStatus.Closed | FortDataStatus.Cooldown:
-                    return new Uri(resourceUriString + "far_inactive.png");
-                case FortDataStatus.Opened | FortDataStatus.Lure:
-                    return new Uri(resourceUriString + "near_lured.png");
-                case FortDataStatus.Closed | FortDataStatus.Lure:
-                    return new Uri(resourceUriString + "far_lured.png");
-                case FortDataStatus.Opened | FortDataStatus.Cooldown | FortDataStatus.Lure:
-                    return new Uri(resourceUriString + "near_inactive_lured.png");
-                case FortDataStatus.Closed | FortDataStatus.Cooldown | FortDataStatus.Lure:
-                    return new Uri(resourceUriString + "far_inactive_lured.png");
-                default:
-                    throw new ArgumentOutOfRangeException();
+                //OnEggHatched?.Invoke(null, hatchedEggResponse);
+
+                for (var i = 0; i < hatchedEggResponse.PokemonId.Count; i++)
+                {
+                    Logger.Write("Egg Hatched");
+                    await UpdateInventory();
+
+                    //TODO: Fix hatching of more than one pokemon at a time
+                    var currentPokemon = PokemonsInventory
+                        .FirstOrDefault(item => item.Id == hatchedEggResponse.PokemonId[i]);
+
+                    if(currentPokemon == null)
+                        continue;
+
+                    await
+                        new MessageDialog(string.Format(
+                            Resources.CodeResources.GetString("EggHatchMessage"),
+                            currentPokemon.PokemonId, hatchedEggResponse.StardustAwarded[i], hatchedEggResponse.CandyAwarded[i],
+                            hatchedEggResponse.ExperienceAwarded[i])).ShowAsyncQueue();
+
+                    NavigationHelper.NavigationState["CurrentPokemon"] =
+                        new PokemonDataWrapper(currentPokemon);
+                    BootStrapper.Current.NavigationService.Navigate(typeof(PokemonDetailPage));
+
+                }
             }
         }
 
-        public object ConvertBack(object value, Type targetType, object parameter, string language)
+        #endregion
+
+        #region Map & Position
+
+        private static Geoposition _lastGeopositionMapObjectsRequest;
+
+        /// <summary>
+        ///     Gets updated map data based on provided position
+        /// </summary>
+        /// <param name="geoposition"></param>
+        /// <returns></returns>
+        private static async
+            Task
+                <
+                    Tuple
+                        <GetMapObjectsResponse, GetHatchedEggsResponse, GetInventoryResponse, CheckAwardedBadgesResponse,
+                            DownloadSettingsResponse>> GetMapObjects(Geoposition geoposition)
         {
-            return value;
+            _lastGeopositionMapObjectsRequest = geoposition;
+            return await _client.Map.GetMapObjects();
         }
 
         #endregion
-    }
 
-    public class GymToIconConverter : IValueConverter
-    {
-        #region Implementation of IValueConverter
+        #region Player Data & Inventory
 
-        public object Convert(object value, Type targetType, object parameter, string language)
+        /// <summary>
+        ///     List of items that can be used when trying to catch a Pokemon
+        /// </summary>
+        public static readonly List<ItemId> CatchItemIds = new List<ItemId>
         {
-            var teamColor = (TeamColor)value;
-            var resourceUriString = "ms-appx:///Assets/Icons/hint_gym";
+            ItemId.ItemPokeBall,
+            ItemId.ItemGreatBall,
+            ItemId.ItemBlukBerry,
+            ItemId.ItemMasterBall,
+            ItemId.ItemNanabBerry,
+            ItemId.ItemPinapBerry,
+            ItemId.ItemRazzBerry,
+            ItemId.ItemUltraBall,
+            ItemId.ItemWeparBerry
+        };
 
-            switch (teamColor)
+        /// <summary>
+        /// List of items, that can be used from the normal ItemsInventoryPage
+        /// </summary>
+        public static readonly List<ItemId> NormalUseItemIds = new List<ItemId>
+        {
+            ItemId.ItemPotion,
+            ItemId.ItemSuperPotion,
+            ItemId.ItemHyperPotion,
+            ItemId.ItemMaxPotion,
+            ItemId.ItemRevive,
+            ItemId.ItemMaxRevive,
+            ItemId.ItemLuckyEgg,
+            ItemId.ItemIncenseOrdinary,
+            ItemId.ItemIncenseSpicy,
+            ItemId.ItemIncenseCool,
+            ItemId.ItemIncenseFloral,
+        };
+
+        /// <summary>
+        ///     Gets user's profile
+        /// </summary>
+        /// <returns></returns>
+        public static async Task UpdateProfile()
+        {
+            PlayerProfile = (await _client.Player.GetPlayer()).PlayerData;
+        }
+
+        /// <summary>
+        ///     Gets player's inventoryDelta
+        /// </summary>
+        /// <returns></returns>
+        public static async Task<LevelUpRewardsResponse> UpdatePlayerStats(bool checkForLevelUp = false)
+        {
+            InventoryDelta = (await _client.Inventory.GetInventory()).InventoryDelta;
+
+            var tmpStats =
+                InventoryDelta.InventoryItems.First(item => item.InventoryItemData.PlayerStats != null)
+                    .InventoryItemData.PlayerStats;
+
+            if (checkForLevelUp && (PlayerStats == null || PlayerStats.Level != tmpStats.Level))
             {
-                case TeamColor.Red:
-                    return new Uri(resourceUriString + "_red.png");
-                case TeamColor.Yellow:
-                    return new Uri(resourceUriString + "_yellow.png");
-                case TeamColor.Blue:
-                    return new Uri(resourceUriString + "_blue.png");
-                case TeamColor.Neutral:
-                    return new Uri(resourceUriString + ".png");
-                default:
-                    throw new ArgumentOutOfRangeException();
+                PlayerStats = tmpStats;
+                var levelUpResponse = await GetLevelUpRewards(tmpStats.Level);
+                await UpdateInventory();
+                // Set busy to false because initial loading may have left it going until we had PlayerStats
+                Busy.SetBusy(false);
+                return levelUpResponse;
             }
-        }
-
-        public object ConvertBack(object value, Type targetType, object parameter, string language)
-        {
-            return value;
-        }
-
-        #endregion
-    }
-
-    public class CurrentTimeToMapColorSchemeConverter : IValueConverter
-    {
-        #region Implementation of IValueConverter
-
-        public object Convert(object value, Type targetType, object parameter, string language)
-        {
-            var currentTime = int.Parse(DateTime.Now.ToString("HH"));
-            return currentTime > 7 && currentTime < 19 ? MapColorScheme.Light : MapColorScheme.Dark;
-        }
-
-        public object ConvertBack(object value, Type targetType, object parameter, string language)
-        {
-            return value;
-        }
-
-        #endregion
-    }
-
-    public class PokemonDataToPokemonStaminaConverter : IValueConverter
-    {
-        #region Implementation of IValueConverter
-
-        public object Convert(object value, Type targetType, object parameter, string language)
-        {
-            if (value == null) return 0;
-            var pokemon = (PokemonDataWrapper)value;
-            return System.Convert.ToDouble(pokemon.Stamina / pokemon.StaminaMax * 100);
-        }
-
-        public object ConvertBack(object value, Type targetType, object parameter, string language)
-        {
-            return value;
-        }
-
-        #endregion
-    }
-
-    public class EggDataToEggIconConverter : IValueConverter
-    {
-        #region Implementation of IValueConverter
-
-        public object Convert(object value, Type targetType, object parameter, string language)
-        {
-            string uri;
-            if (value == null) uri = "ms-appx:///Assets/Items/Egg.png";
-            else
-            {
-                var egg = (PokemonDataWrapper)value;
-                uri = string.IsNullOrEmpty(egg.EggIncubatorId)
-                    ? "ms-appx:///Assets/Items/Egg.png"
-                    : $"ms-appx:///Assets/Items/E_Item_{(int)GameClient.GetIncubatorFromEgg(egg.WrappedData).ItemId}.png";
-            }
-            return new BitmapImage(new Uri(uri));
-        }
-
-        public object ConvertBack(object value, Type targetType, object parameter, string language)
-        {
-            return value;
-        }
-
-        #endregion
-    }
-
-    public class EggDataToEggProgressConverter : IValueConverter
-    {
-        #region Implementation of IValueConverter
-
-        public object Convert(object value, Type targetType, object parameter, string language)
-        {
-            if (value == null || !(value is IncubatedEggDataWrapper)) return 0;
-            var pokemon = (IncubatedEggDataWrapper)value;
-            return (int)((pokemon.EggKmWalkedStart / pokemon.EggKmWalkedTarget) * 100);
-        }
-
-        public object ConvertBack(object value, Type targetType, object parameter, string language)
-        {
-            return value;
-        }
-
-        #endregion
-    }
-
-    public class PokemonSortingModesToSortingModesListConverter : IValueConverter
-    {
-        #region Implementation of IValueConverter
-
-        public object Convert(object value, Type targetType, object parameter, string language)
-        {
-            return Enum.GetValues(typeof(PokemonSortingModes)).Cast<PokemonSortingModes>().ToList();
-        }
-
-        public object ConvertBack(object value, Type targetType, object parameter, string language)
-        {
-            return value;
-        }
-
-        #endregion
-    }
-
-    public class PokemonSortingModesToIconConverter : IValueConverter
-    {
-        #region Implementation of IValueConverter
-
-        public object Convert(object value, Type targetType, object parameter, string language)
-        {
-            var sortingMode = (PokemonSortingModes)value;
-            return new Uri($"ms-appx:///Assets/Icons/ic_{sortingMode.ToString().ToLowerInvariant()}.png");
-        }
-
-        public object ConvertBack(object value, Type targetType, object parameter, string language)
-        {
-            return value;
-        }
-
-        #endregion
-    }
-
-    public class PokemonSortingModesTranslationConverter : IValueConverter
-    {
-        #region Implementation of IValueConverter
-
-        public object Convert(object value, Type targetType, object parameter, string language)
-        {
-            var sortingMode = (PokemonSortingModes)value;
-            return Resources.CodeResources.GetString(sortingMode.ToString());
-        }
-
-        public object ConvertBack(object value, Type targetType, object parameter, string language)
-        {
-            return value;
-        }
-
-        #endregion
-    }
-
-    public class IncubatorUsagesCountToUsagesTextConverter : IValueConverter
-    {
-        #region Implementation of IValueConverter
-
-        public object Convert(object value, Type targetType, object parameter, string language)
-        {
-            var incubator = (EggIncubator)value;
-            return incubator.ItemId == ItemId.ItemIncubatorBasicUnlimited ? "∞" : $"{incubator.UsesRemaining}";
-        }
-
-        public object ConvertBack(object value, Type targetType, object parameter, string language)
-        {
+            PlayerStats = tmpStats;
+            // Set busy to false because initial loading may have left it going until we had PlayerStats
+            Busy.SetBusy(false);
             return null;
         }
 
-        #endregion
-    }
-
-    public class VisibleWhenStringEmptyConverter : IValueConverter
-    {
-        #region Implementation of IValueConverter
-
-        public object Convert(object value, Type targetType, object parameter, string language)
+        /// <summary>
+        ///     Gets player's inventoryDelta
+        /// </summary>
+        /// <returns></returns>
+        public static async Task<GetInventoryResponse> GetInventory()
         {
-            return string.IsNullOrEmpty((string)value) ? Visibility.Visible : Visibility.Collapsed;
+            return await _client.Inventory.GetInventory();
         }
 
-        public object ConvertBack(object value, Type targetType, object parameter, string language)
+        /// <summary>
+        ///     Gets the rewards after leveling up
+        /// </summary>
+        /// <returns></returns>
+        public static async Task<LevelUpRewardsResponse> GetLevelUpRewards(int newLevel)
         {
-            return value;
+            return await _client.Player.GetLevelUpRewards(newLevel);
         }
 
-        #endregion
-    }
-
-    public class VisibleWhenGreaterThanConverter : IValueConverter
-    {
-        #region Implementation of IValueConverter
-
-        public object Convert(object value, Type targetType, object parameter, string language)
+        /// <summary>
+        ///     Pokedex extra data doesn't change so we can just call this method once.
+        /// </summary>
+        /// <returns></returns>
+        private static async Task UpdateItemTemplates()
         {
-            return (int)value > (parameter != null ? System.Convert.ToInt32(parameter) : 0) ? Visibility.Visible : Visibility.Collapsed;
-        }
+            // Get all the templates
+            var itemTemplates = await DataCache.GetAsync("itemTemplates", async () => (await _client.Download.GetItemTemplates()).ItemTemplates, DateTime.Now.AddMonths(1));
 
-        public object ConvertBack(object value, Type targetType, object parameter, string language)
-        {
-            return value;
-        }
-
-        #endregion
-    }
-
-    public class EmptyConverter : IValueConverter
-    {
-        #region Implementation of IValueConverter
-
-        public object Convert(object value, Type targetType, object parameter, string language)
-        {
-            return value;
-        }
-
-        public object ConvertBack(object value, Type targetType, object parameter, string language)
-        {
-            return value;
-        }
-
-        #endregion
-    }
-
-    public class StringFormatConverter : IValueConverter
-    {
-        #region Implementation of IValueConverter
-
-        public object Convert(object value, Type targetType, object parameter, string language)
-        {
-            return string.Format(parameter as string, value);
-        }
-
-        public object ConvertBack(object value, Type targetType, object parameter, string language)
-        {
-            return null;
-        }
-
-        #endregion
-    }
-
-    public class PlayerDataToCurrentExperienceConverter : IValueConverter
-    {
-        // TODO: find a better place for this
-        private readonly int[] _xpTable =
-        {
-            0, 1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000, 10000, 10000, 10000, 15000, 20000, 20000, 20000, 25000, 25000, 50000, 75000, 100000, 125000, 150000, 190000, 200000, 250000, 300000, 350000
-        };
-
-        #region Implementation of IValueConverter
-
-        public object Convert(object value, Type targetType, object parameter, string language)
-        {
-            var playerStats = (PlayerStats)value;
-            //return playerStats?.Experience - playerStats?.PrevLevelXp ?? 0;
-            return playerStats == null ? 0 : _xpTable[playerStats.Level] - (playerStats.NextLevelXp - playerStats.Experience);
-        }
-
-        public object ConvertBack(object value, Type targetType, object parameter, string language)
-        {
-            return value;
-        }
-
-        #endregion
-    }
-
-    public class PlayerDataToTotalLevelExperienceConverter : IValueConverter
-    {
-        // TODO: find a better place for this
-        private readonly int[] _xpTable =
-        {
-            0, 1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000, 10000, 10000, 10000, 15000, 20000, 20000, 20000, 25000, 25000, 50000, 75000, 100000, 125000, 150000, 190000, 200000, 250000, 300000, 350000
-        };
-
-        #region Implementation of IValueConverter
-
-        public object Convert(object value, Type targetType, object parameter, string language)
-        {
-            var playerStats = (PlayerStats)value;
-            return playerStats == null ? 0 : _xpTable[playerStats.Level];
-        }
-
-        public object ConvertBack(object value, Type targetType, object parameter, string language)
-        {
-            return value;
-        }
-
-        #endregion
-    }
-
-    public class PlayerDataToPokeCoinsConverter : IValueConverter
-    {
-        #region Implementation of IValueConverter
-
-        public object Convert(object value, Type targetType, object parameter, string language)
-        {
-            var playerData = (PlayerData)value;
-            return playerData?.Currencies.First(item => item.Name.Equals("POKECOIN")).Amount ?? 0;
-        }
-
-        public object ConvertBack(object value, Type targetType, object parameter, string language)
-        {
-            return value;
-        }
-
-        #endregion
-    }
-
-    public class MsToDateFormatConverter : IValueConverter
-    {
-        #region IValueConverter Members
-
-        public object Convert(object value, Type targetType, object parameter, string language)
-        {
-            var ms = System.Convert.ToUInt64(value);
-            var date = new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Local);
-            date = date.Add(TimeSpan.FromMilliseconds(ms));
-            return date.ToString(Resources.CodeResources.GetString("DateFormat"));
-        }
-
-        public object ConvertBack(object value, Type targetType, object parameter, string language)
-        {
-            return value;
-        }
-
-        #endregion
-    }
-
-    //parameter is optional
-    //Use parameter to pass margin between items and page margin
-    //format: itemsMargin,pageMargins
-    //first is margin between items, the second is page margins
-    //ex: items margin = 8,4,8,8 | page margins = 12,0,12,0 | parameter will be 16,24
-    public class WidthConverter : IValueConverter
-    {
-        private static readonly char[] splitValue = { ',' };
-
-        #region Implementation of IValueConverter
-
-        public object Convert(object value, Type targetType, object parameter, string language)
-        {
-            int minColumns = (int)value;
-            double externalMargin = 0;
-            double internalMargin = 0;
-            if (!string.IsNullOrEmpty(parameter as string))
+            // Update Pokedex data
+            PokemonSettings = await DataCache.GetAsync(nameof(PokemonSettings), async () =>
             {
-                string[] margins = parameter.ToString().Split(splitValue, StringSplitOptions.RemoveEmptyEntries);
-                if (margins.Length > 0)
-                    internalMargin = Double.Parse(margins[0]);
-                if (margins.Length > 1)
-                    externalMargin = Double.Parse(margins[1]);
-            }
+                await Task.CompletedTask;
+                return itemTemplates.Where(
+                    item => item.PokemonSettings != null && item.PokemonSettings.FamilyId != PokemonFamilyId.FamilyUnset)
+                    .Select(item => item.PokemonSettings);
+            }, DateTime.Now.AddMonths(1));
 
-            var bounds = ApplicationView.GetForCurrentView().VisibleBounds;
-            var scaleFactor = 1;//DisplayInformation.GetForCurrentView().RawPixelsPerViewPixel;
-            var size = new Size(bounds.Width * scaleFactor, bounds.Height * scaleFactor);
-            var res = ((size.Width - externalMargin) / minColumns) - internalMargin;
+            //PokemonUpgradeCosts = await DataCache.GetAsync(nameof(PokemonUpgradeCosts), async () =>
+            //{
+            //    await Task.CompletedTask;
+            //    // Update Pokemon upgrade templates
+            //    var tmpPokemonUpgradeCosts = itemTemplates.First(item => item.PokemonUpgrades != null).PokemonUpgrades;
+            //    var tmpResult = new Dictionary<int, object[]>();
+            //    for (var i = 0; i < tmpPokemonUpgradeCosts.CandyCost.Count; i++)
+            //    {
+            //        tmpResult.Add(i,
+            //            new object[] { tmpPokemonUpgradeCosts.CandyCost[i], tmpPokemonUpgradeCosts.StardustCost[i] });
+            //    }
+            //    return tmpResult;
+            //}, DateTime.Now.AddMonths(1));
 
-            //https://msdn.microsoft.com/en-us/windows/uwp/layout/design-and-ui-intro#effective-pixels-and-scaling
-            var width = ((int)res / 4) * 4; //round to 4 - win 10 optimized 
-            return width;
-        }
-
-        public object ConvertBack(object value, Type targetType, object parameter, string language)
-        {
-            throw new NotImplementedException();
-        }
-
-        #endregion
-    }
-
-    public class IntToBooleanConverter : IValueConverter {
-
-        #region Implementation of IValueConverter
-
-        public object Convert(object value, Type targetType, object parameter, string language) {
-            return value.Equals(1);
-        }
-
-        public object ConvertBack(object value, Type targetType, object parameter, string language) {
-            throw new NotImplementedException();
-        }
-
-        #endregion
-    }
-
-    public class PokemonLastHoursVisibiltyConverter : IValueConverter {
-       
-        #region Implementation of IValueConverter
-
-        public object Convert(object value, Type targetType, object parameter, string language) {
-            if(value == null) {
-                return Visibility.Collapsed;
-            }
-            var ms = System.Convert.ToUInt64(value);
-            var creationDate = new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Local);
-            creationDate = creationDate.Add(TimeSpan.FromMilliseconds(ms));
-            var now = DateTime.Now;
-            if (now.AddDays(-1) <= creationDate) {
-                return Visibility.Visible;
-            } else {
-                return Visibility.Collapsed;
-            }
-        }
-
-        public object ConvertBack(object value, Type targetType, object parameter, string language) {
-            throw new NotImplementedException();
-        }
-
-        #endregion
-    }
-
-    public class PokemonTypeToBackgroundImageConverter : IValueConverter
-    {
-        #region Implementation of IValueConverter
-
-        public object Convert(object value, Type targetType, object parameter, string language)
-        {
-            if (value == null || !(value is PokemonType)) return new Uri("ms-appx:///Assets/Backgrounds/details_type_bg_normal.png");
-            var type = (PokemonType)value;
-            return new Uri($"ms-appx:///Assets/Backgrounds/details_type_bg_{type}.png");
-        }
-
-        public object ConvertBack(object value, Type targetType, object parameter, string language)
-        {
-            throw new NotImplementedException();
-        }
-
-        #endregion
-    }
-
-    public class BooleanToVisibilityConverter : IValueConverter
-    {
-        #region Implementation of IValueConverter
-
-        private object GetVisibility(object value)
-        {
-            if (!(value is bool))
-                return Visibility.Collapsed;
-            bool objValue = (bool)value;
-            if (objValue)
+            PokemonUpgradeSettings = await DataCache.GetAsync(nameof(PokemonUpgradeSettings), async () =>
             {
-                return Visibility.Visible;
-            }
-            return Visibility.Collapsed;
+                await Task.CompletedTask;
+                return itemTemplates.First(item => item.PokemonUpgrades != null).PokemonUpgrades;
+            }, DateTime.Now.AddMonths(1));
+
+
+            // Update Moves data
+            MoveSettings = await DataCache.GetAsync(nameof(MoveSettings), async () =>
+            {
+                await Task.CompletedTask;
+                return itemTemplates.Where(item => item.MoveSettings != null)
+                                    .Select(item => item.MoveSettings);
+            }, DateTime.Now.AddMonths(1));
         }
-        public object Convert(object value, Type targetType, object parameter, string language)
+
+        /// <summary>
+        ///     Updates inventory data
+        /// </summary>
+        public static async Task UpdateInventory()
         {
-            return GetVisibility(value);
-        }
-        public object ConvertBack(object value, Type targetType, object parameter, string language)
-        {
-            throw new NotImplementedException();
+            // Get ALL the items
+            var response = await GetInventory();
+            var fullInventory = response.InventoryDelta?.InventoryItems;
+            // Update items
+            ItemsInventory.AddRange(fullInventory.Where(item => item.InventoryItemData.Item != null)
+                .GroupBy(item => item.InventoryItemData.Item)
+                .Select(item => item.First().InventoryItemData.Item), true);
+            CatchItemsInventory.AddRange(
+                fullInventory.Where(
+                    item =>
+                        item.InventoryItemData.Item != null && CatchItemIds.Contains(item.InventoryItemData.Item.ItemId))
+                    .GroupBy(item => item.InventoryItemData.Item)
+                    .Select(item => item.First().InventoryItemData.Item), true);
+
+            // Update incbuators
+            FreeIncubatorsInventory.AddRange(fullInventory.Where(item => item.InventoryItemData.EggIncubators != null)
+                .SelectMany(item => item.InventoryItemData.EggIncubators.EggIncubator)
+                .Where(item => item != null && item.PokemonId == 0), true);
+            UsedIncubatorsInventory.AddRange(fullInventory.Where(item => item.InventoryItemData.EggIncubators != null)
+                .SelectMany(item => item.InventoryItemData.EggIncubators.EggIncubator)
+                .Where(item => item != null && item.PokemonId != 0), true);
+
+            // Update Pokedex
+            PokedexInventory.AddRange(fullInventory.Where(item => item.InventoryItemData.PokedexEntry != null)
+                .Select(item => item.InventoryItemData.PokedexEntry), true);
+
+            // Update Pokemons
+            PokemonsInventory.AddRange(fullInventory.Select(item => item.InventoryItemData.PokemonData)
+                .Where(item => item != null && item.PokemonId > 0), true);
+            EggsInventory.AddRange(fullInventory.Select(item => item.InventoryItemData.PokemonData)
+                .Where(item => item != null && item.IsEgg), true);
+
+            // Update candies
+            CandyInventory.AddRange(from item in fullInventory
+                                    where item.InventoryItemData?.Candy != null
+                                    where item.InventoryItemData?.Candy.FamilyId != PokemonFamilyId.FamilyUnset
+                                    group item by item.InventoryItemData?.Candy.FamilyId into family
+                                    select new Candy
+                                    {
+                                        FamilyId = family.FirstOrDefault().InventoryItemData.Candy.FamilyId,
+                                        Candy_ = family.FirstOrDefault().InventoryItemData.Candy.Candy_
+                                    }, true);
+
         }
 
         #endregion
-    }
 
-    public class StringToVisibilityConverter : IValueConverter
-    {
-        #region Implementation of IValueConverter
+        #region Pokemon Handling
 
-        public object Convert(object value, Type targetType, object parameter, string language)
+        #region Pokedex
+
+        /// <summary>
+        ///     Gets extra data for the current pokemon
+        /// </summary>
+        /// <param name="pokemonId"></param>
+        /// <returns></returns>
+        public static PokemonSettings GetExtraDataForPokemon(PokemonId pokemonId)
         {
-            if (string.IsNullOrEmpty((string)value))
-            {
-                return Visibility.Collapsed;
-            }
-            else
-            {
-                return Visibility.Visible;
-            }
+            return PokemonSettings.First(pokemon => pokemon.PokemonId == pokemonId);
         }
 
-        public object ConvertBack(object value, Type targetType, object parameter, string language)
+        #endregion
+
+        #region Catching
+
+        /// <summary>
+        ///     Encounters the selected Pokemon
+        /// </summary>
+        /// <param name="encounterId"></param>
+        /// <param name="spawnpointId"></param>
+        /// <returns></returns>
+        public static async Task<EncounterResponse> EncounterPokemon(ulong encounterId, string spawnpointId)
         {
-            throw new NotImplementedException();
+            return await _client.Encounter.EncounterPokemon(encounterId, spawnpointId);
         }
+
+        /// <summary>
+        ///     Encounters the selected lured Pokemon
+        /// </summary>
+        /// <param name="encounterId"></param>
+        /// <param name="spawnpointId"></param>
+        /// <returns></returns>
+        public static async Task<DiskEncounterResponse> EncounterLurePokemon(ulong encounterId, string spawnpointId)
+        {
+            return await _client.Encounter.EncounterLurePokemon(encounterId, spawnpointId);
+        }
+
+        /// <summary>
+        ///     Executes Pokemon catching
+        /// </summary>
+        /// <param name="encounterId"></param>
+        /// <param name="spawnpointId"></param>
+        /// <param name="captureItem"></param>
+        /// <param name="hitPokemon"></param>
+        /// <returns></returns>
+        public static async Task<CatchPokemonResponse> CatchPokemon(ulong encounterId, string spawnpointId,
+            ItemId captureItem, bool hitPokemon = true)
+        {
+            var random = new Random();
+            return
+                await
+                    _client.Encounter.CatchPokemon(encounterId, spawnpointId, captureItem, random.NextDouble() * 1.95D,
+                        random.NextDouble(), 1, hitPokemon);
+        }
+
+        /// <summary>
+        ///     Throws a capture item to the Pokemon
+        /// </summary>
+        /// <param name="encounterId"></param>
+        /// <param name="spawnpointId"></param>
+        /// <param name="captureItem"></param>
+        /// <returns></returns>
+        public static async Task<UseItemCaptureResponse> UseCaptureItem(ulong encounterId, string spawnpointId,
+            ItemId captureItem)
+        {
+            return await _client.Encounter.UseCaptureItem(encounterId, captureItem, spawnpointId);
+        }
+
+        #endregion
+
+        #region Power Up & Evolving & Transfer & Favorite
+
+        /// <summary>
+        ///
+        /// </summary>
+        /// <param name="pokemon"></param>
+        /// <returns></returns>
+        public static async Task<UpgradePokemonResponse> PowerUpPokemon(PokemonData pokemon)
+        {
+            return await _client.Inventory.UpgradePokemon(pokemon.Id);
+        }
+
+        /// <summary>
+        ///
+        /// </summary>
+        /// <param name="pokemon"></param>
+        /// <returns></returns>
+        public static async Task<EvolvePokemonResponse> EvolvePokemon(PokemonData pokemon)
+        {
+            return await _client.Inventory.EvolvePokemon(pokemon.Id);
+        }
+
+        /// <summary>
+        /// Transfers the Pokemon
+        /// </summary>
+        /// <param name="pokemonId"></param>
+        /// <returns></returns>
+        public static async Task<ReleasePokemonResponse> TransferPokemon(ulong pokemonId)
+        {
+            return await _client.Inventory.TransferPokemon(pokemonId);
+        }
+
+        /// <summary>
+        /// Favourites/Unfavourites the Pokemon
+        /// </summary>
+        /// <param name="pokemonId"></param>
+        /// <param name="isFavorite"></param>
+        /// <returns></returns>
+        public static async Task<SetFavoritePokemonResponse> SetFavoritePokemon(ulong pokemonId, bool isFavorite)
+        {
+            // Cast ulong to long... because Niantic is a bunch of retarded idiots...
+            long pokeId = (long)pokemonId;
+            return await _client.Inventory.SetFavoritePokemon(pokeId, isFavorite);
+        }
+
+        public static async Task<NicknamePokemonResponse> SetPokemonNickName(ulong pokemonId, string nickName)
+        {
+            return await _client.Inventory.NicknamePokemon(pokemonId, nickName);
+        }
+
+        #endregion
+
+        #endregion
+
+        #region Pokestop Handling
+
+        /// <summary>
+        ///     Gets fort data for the given Id
+        /// </summary>
+        /// <param name="pokestopId"></param>
+        /// <param name="latitude"></param>
+        /// <param name="longitude"></param>
+        /// <returns></returns>
+        public static async Task<FortDetailsResponse> GetFort(string pokestopId, double latitude, double longitude)
+        {
+            return await _client.Fort.GetFort(pokestopId, latitude, longitude);
+        }
+
+        /// <summary>
+        ///     Searches the given fort
+        /// </summary>
+        /// <param name="pokestopId"></param>
+        /// <param name="latitude"></param>
+        /// <param name="longitude"></param>
+        /// <returns></returns>
+        public static async Task<FortSearchResponse> SearchFort(string pokestopId, double latitude, double longitude)
+        {
+            return await _client.Fort.SearchFort(pokestopId, latitude, longitude);
+        }
+
+        public static async Task<AddFortModifierResponse> AddFortModifier(string pokestopId, ItemId modifierType)
+        {
+            return await _client.Fort.AddFortModifier(pokestopId, modifierType);
+        }
+        #endregion
+
+        #region Gym Handling
+
+        /// <summary>
+        ///     Gets the details for the given Gym
+        /// </summary>
+        /// <param name="gymid"></param>
+        /// <param name="latitude"></param>
+        /// <param name="longitude"></param>
+        /// <returns></returns>
+        public static async Task<GetGymDetailsResponse> GetGymDetails(string gymid, double latitude, double longitude)
+        {
+            return await _client.Fort.GetGymDetails(gymid, latitude, longitude);
+        }
+
+        /// The following _client.Fort methods need implementation:
+        /// FortDeployPokemon
+        /// FortRecallPokemon
+        /// StartGymBattle
+        /// AttackGym
+
+        #endregion
+
+        #region Items Handling
+
+        /// <summary>
+        ///     Recycles the given amount of the selected item
+        /// </summary>
+        /// <param name="item"></param>
+        /// <param name="amount"></param>
+        /// <returns></returns>
+        public static async Task<RecycleInventoryItemResponse> RecycleItem(ItemId item, int amount)
+        {
+            return await _client.Inventory.RecycleItem(item, amount);
+        }
+
+        #endregion
+
+        #region Eggs Handling
+
+        /// <summary>
+        ///     Uses the selected incubator on the given egg
+        /// </summary>
+        /// <param name="incubator"></param>
+        /// <param name="egg"></param>
+        /// <returns></returns>
+        public static async Task<UseItemEggIncubatorResponse> UseEggIncubator(EggIncubator incubator, PokemonData egg)
+        {
+            return await _client.Inventory.UseItemEggIncubator(incubator.Id, egg.Id);
+        }
+
+        /// <summary>
+        ///     Gets the incubator used by the given egg
+        /// </summary>
+        /// <param name="egg"></param>
+        /// <returns></returns>
+        public static EggIncubator GetIncubatorFromEgg(PokemonData egg)
+        {
+            return UsedIncubatorsInventory.First(item => item.Id.Equals(egg.EggIncubatorId));
+        }
+
+        #endregion
+
         #endregion
     }
 }
