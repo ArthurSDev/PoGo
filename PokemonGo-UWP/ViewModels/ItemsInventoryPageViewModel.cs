@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading.Tasks;
@@ -12,6 +12,7 @@ using Template10.Services.NavigationService;
 using PokemonGo_UWP.Controls;
 using POGOProtos.Networking.Responses;
 using System;
+using Windows.UI.Popups;
 
 namespace PokemonGo_UWP.ViewModels
 {
@@ -115,7 +116,20 @@ namespace PokemonGo_UWP.ViewModels
 
         public ItemsInventoryViewMode ViewMode { get; set; }
 
-        #endregion
+        /*private bool _isIncenseActive;
+        public bool IsIncenseActive
+        {
+            get { return _isIncenseActive;  }
+            private set { Set(ref _isIncenseActive, value); }
+        }*/
+
+        /*private DateTime _incenseActivationTime;
+        public DateTime IncenseActivationTime
+        {
+            get { return _incenseActivationTime; }
+            private set { Set(ref _incenseActivationTime, value); }
+        }*/
+
 
         #region Game Logic
 
@@ -185,6 +199,71 @@ namespace PokemonGo_UWP.ViewModels
 
               dialog.Show();
           }, (ItemDataWrapper item) => true));
+
+        #endregion
+
+        #region UseItem
+
+        private DelegateCommand<ItemDataWrapper> _useItemCommand;
+
+        public DelegateCommand<ItemDataWrapper> UseItemCommand => _useItemCommand ?? (
+          _useItemCommand = new DelegateCommand<ItemDataWrapper>(async (ItemDataWrapper item) =>
+          {
+              var dialog = new MessageDialog($"Tapped item");
+              await dialog.ShowAsyncQueue();
+              switch (item.ItemId)
+              {
+                  case POGOProtos.Inventory.Item.ItemId.ItemIncenseOrdinary:
+                  case POGOProtos.Inventory.Item.ItemId.ItemIncenseSpicy:
+                  case POGOProtos.Inventory.Item.ItemId.ItemIncenseCool:
+                  case POGOProtos.Inventory.Item.ItemId.ItemIncenseFloral:
+                      // Send useIncense request
+                      var res = await GameClient.UseIncense(item.ItemId);
+                      switch (res.Result)
+                      {
+                          case UseIncenseResponse.Types.Result.Unknown:
+                              break;
+                          case UseIncenseResponse.Types.Result.Success:
+                              // Refresh the Item amount
+                              item.WrappedData.Count -= 1;
+                              // Hacky? you guessed it...
+                              item.Update(item.WrappedData);
+
+                              // Handle if there are no more items of this type
+                              if (item.WrappedData.Count == 0)
+                              {
+                                  GameClient.ItemsInventory.Remove(item.WrappedData);
+                                  ItemsInventory.Remove(item);
+                              }
+                              // Update the total count
+                              ItemsTotalCount = ItemsInventory.Sum(i => i.WrappedData.Count);
+                              await new MessageDialog($"Incense activated.").ShowAsyncQueue();
+                              GameClient.IsIncenseActive = true;
+                              GameClient.IncenseActivationTime = DateTime.Now;
+                              break;
+                          case UseIncenseResponse.Types.Result.IncenseAlreadyActive:
+                              await new MessageDialog($"Incense already active").ShowAsyncQueue();
+                              GameClient.IsIncenseActive = true;
+                              break;
+                          case UseIncenseResponse.Types.Result.NoneInInventory:
+                              await new MessageDialog($"No incense available in inventory").ShowAsyncQueue();
+                              break;
+                          case UseIncenseResponse.Types.Result.LocationUnset:
+                              await new MessageDialog($"Location not set").ShowAsyncQueue();
+                              break;
+                          default:
+                              throw new ArgumentOutOfRangeException();
+                      }
+                      break;
+                  case POGOProtos.Inventory.Item.ItemId.ItemLuckyEgg:
+                  case POGOProtos.Inventory.Item.ItemId.ItemHyperPotion:
+                      break;
+                  default:
+                      break;
+              }
+          }, (ItemDataWrapper item) => true));
+
+        #endregion
 
         #endregion
 
