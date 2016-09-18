@@ -18,6 +18,7 @@
             <utils:PokemonIdToNumericId x:Key="PokemonIdToNumericId" />
             <utils:ItemClickEventArgsToClickedItemConverter x:Key="ItemClickEventArgsToClickedItemConverter" />
             <utils:PokemonIdToPokemonSpriteConverter x:Key="PokemonIdToPokemonSpriteConverter" />
+            <utils:IncensePokemon x:Key="IncensePokemon" />
             <utils:PokemonTypeTranslationConverter x:Key="PokemonTypeTranslationConverter" />
             <utils:EmptyConverter x:Key="EmptyConverter" />
             <utils:PlayerTeamToTeamColorBrushConverter x:Key="PlayerTeamToTeamColorBrushConverter" />
