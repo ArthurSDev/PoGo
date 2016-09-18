@@ -1075,10 +1075,7 @@ namespace PokemonGo_UWP.Utils
         {
             return await _client.Fort.GetFort(pokestopId, latitude, longitude);
         }
-
-        public static async Task<AddFortModifierResponse> AddFortModifier(string pokestopId, ItemId modifierType)
-	        {
-	            return await _client.Fort.AddFortModifier(pokestopId, modifierType);
+        
         /// <summary>
         ///     Searches the given fort
         /// </summary>
@@ -1089,6 +1086,11 @@ namespace PokemonGo_UWP.Utils
         public static async Task<FortSearchResponse> SearchFort(string pokestopId, double latitude, double longitude)
         {
             return await _client.Fort.SearchFort(pokestopId, latitude, longitude);
+        }
+
+        public static async Task<AddFortModifierResponse> AddFortModifier(string pokestopId, ItemId modifierType)
+        {
+            return await _client.Fort.AddFortModifier(pokestopId, modifierType);
         }
         #endregion
         
