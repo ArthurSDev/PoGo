@@ -203,6 +203,7 @@ namespace PokemonGo_UWP.Utils
         /// </summary>
         public static InventoryDelta InventoryDelta { get; private set; }
 
+       
         #region Collections
 
         /// <summary>
@@ -222,6 +223,11 @@ namespace PokemonGo_UWP.Utils
         /// </summary>
         public static ObservableCollection<LuredPokemon> LuredPokemons { get; set; } = new ObservableCollection<LuredPokemon>();
 
+        /// <summary>
+        ///     Collection of incense Pokemon
+        /// </summary>
+        public static ObservableCollection<IncensePokemon> IncensePokemons { get; set; } = new ObservableCollection<IncensePokemon>();
+        
         /// <summary>
         ///     Collection of Pokestops in the current area
         /// </summary>
@@ -574,6 +580,12 @@ namespace PokemonGo_UWP.Utils
         private static DateTime _lastUpdate;
 
         /// <summary>
+        ///     Incense usage status
+        /// </summary>
+        public static bool IsIncenseActive = false;
+        public static DateTime IncenseActivationTime = default(DateTime);
+
+        /// <summary>
         ///     Toggles the update timer based on the isEnabled value
         /// </summary>
         /// <param name="isEnabled"></param>
@@ -632,6 +644,27 @@ namespace PokemonGo_UWP.Utils
             var newLuredPokemon = newPokeStops.Where(item => item.LureInfo != null).Select(item => new LuredPokemon(item.LureInfo, item.Latitude, item.Longitude)).ToArray();
             Logger.Write($"Found {newLuredPokemon.Length} lured Pokemon");
             LuredPokemons.UpdateByIndexWith(newLuredPokemon, x => x);
+
+            // Update IncensePokemon if incense active (set less than 30 minutes ago)
+            TimeSpan ts = DateTime.Now - GameClient.IncenseActivationTime;
+            if (IsIncenseActive && ts.Seconds < 1800)
+            {
+                var incensePokemonResponse = await GetIncensePokemons(LocationServiceHelper.Instance.Geoposition);
+                if (incensePokemonResponse.Result == GetIncensePokemonResponse.Types.Result.IncenseEncounterAvailable)
+                {
+                    IncensePokemon[] newIncensePokemon;
+                    newIncensePokemon = new IncensePokemon[1];
+                    newIncensePokemon[0] = new IncensePokemon(incensePokemonResponse, incensePokemonResponse.Latitude, incensePokemonResponse.Longitude);
+                    Logger.Write($"Found incense Pokemon");
+                    IncensePokemons.UpdateByIndexWith(newIncensePokemon, x => x);
+                }
+            }
+            else
+            {
+                IsIncenseActive = false;
+                IncenseActivationTime = default(DateTime);
+            }
+
             Logger.Write("Finished updating map objects");
 
             // Update Hatched Eggs
@@ -686,6 +719,18 @@ namespace PokemonGo_UWP.Utils
         {
             _lastGeopositionMapObjectsRequest = geoposition;
             return await _client.Map.GetMapObjects();
+        }
+
+        /// <summary>
+        ///     Gets updated incense Pokemon data based on provided position
+        /// </summary>
+        /// <param name="geoposition"></param>
+        /// <returns></returns>
+        private static async
+            Task
+                <GetIncensePokemonResponse> GetIncensePokemons(Geoposition geoposition)
+        {
+            return await _client.Map.GetIncensePokemons();
         }
 
         #endregion
@@ -921,6 +966,16 @@ namespace PokemonGo_UWP.Utils
         }
 
         /// <summary>
+        ///     Encounters the selected incense Pokemon
+        /// </summary>
+        /// <param name="encounterId"></param>
+        /// <param name="spawnpointId"></param>
+        /// <returns></returns>
+        public static async Task<IncenseEncounterResponse> EncounterIncensePokemon(ulong encounterId, string spawnpointId)
+        {
+            return await _client.Encounter.EncounterIncensePokemon(encounterId, spawnpointId);
+        }
+        /// <summary>
         ///     Executes Pokemon catching
         /// </summary>
         /// <param name="encounterId"></param>
@@ -1033,10 +1088,6 @@ namespace PokemonGo_UWP.Utils
             return await _client.Fort.SearchFort(pokestopId, latitude, longitude);
         }
 
-        public static async Task<AddFortModifierResponse> AddFortModifier(string pokestopId, ItemId modifierType)
-        {
-            return await _client.Fort.AddFortModifier(pokestopId, modifierType);
-        }
         #endregion
 
         #region Gym Handling
@@ -1072,6 +1123,17 @@ namespace PokemonGo_UWP.Utils
         public static async Task<RecycleInventoryItemResponse> RecycleItem(ItemId item, int amount)
         {
             return await _client.Inventory.RecycleItem(item, amount);
+        }
+
+        /// <summary>
+        ///     Use selected incense
+        /// </summary>
+        /// <param name="item"></param>
+        /// <param name="amount"></param>
+        /// <returns></returns>
+        public static async Task<UseIncenseResponse> UseIncense(ItemId item)
+        {
+            return await _client.Inventory.UseIncense(item);
         }
 
         #endregion
