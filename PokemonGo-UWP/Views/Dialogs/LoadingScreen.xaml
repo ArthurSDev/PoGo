@@ -1,4 +1,4 @@
-﻿<UserControl x:ConnectionId='1' x:Class="PokemonGo_UWP.Views.LoadingScreen"
+<UserControl x:Class="PokemonGo_UWP.Views.LoadingScreen"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
@@ -11,29 +11,29 @@
           HorizontalAlignment="Stretch">
 
         <RelativePanel.Background>
-            <ImageBrush x:ConnectionId='2' x:Name="BackgroundImageBrush"
+            <ImageBrush x:Name="BackgroundImageBrush"
                         ImageSource="../../Assets/Warnings/1.png"
                         Stretch="Fill"/>
         </RelativePanel.Background>
 
-        <TextBlock x:ConnectionId='3' Margin="0,0,0,24"
+        <TextBlock Margin="0,0,0,24"
                    FontSize="20"
                    RelativePanel.Above="LoadingProgressBar"
                    RelativePanel.AlignHorizontalCenterWithPanel="True"
                    TextAlignment="Center"
                    Foreground="Black"
-                                                                                   />
-        <ProgressBar x:ConnectionId='4' x:Name="LoadingProgressBar"
+                   Text="{x:Bind BusyText, Mode=OneWay, FallbackValue='BusyText'}" />
+        <ProgressBar x:Name="LoadingProgressBar"
                      RelativePanel.Above="InfoMessageBorder"
                      RelativePanel.AlignLeftWithPanel="True"
                      RelativePanel.AlignRightWithPanel="True"
                      Margin="24,0"
                      Height="48"
-                                                                   
+                     IsIndeterminate="{x:Bind IsBusy, Mode=OneWay}"
                      Grid.Row="1"
                      Foreground="Black" />
 
-        <Border x:ConnectionId='5' x:Name="InfoMessageBorder" 
+        <Border x:Name="InfoMessageBorder" 
                 RelativePanel.AlignLeftWithPanel="True"
                 RelativePanel.AlignRightWithPanel="True"
                 RelativePanel.AlignBottomWithPanel="True"
@@ -41,10 +41,10 @@
                 Height="70"
                 CornerRadius="10"
                 Margin="24">
-            <TextBlock x:ConnectionId='6' x:Name="InfoMessageTextBlock"
+            <TextBlock x:Name="InfoMessageTextBlock"
                        FontSize="20"
                        Margin="6"
-                                                                                            
+                       Text="{x:Bind InfoMessage, Mode=OneWay, FallbackValue='InfoMessage'}"
                        TextWrapping="Wrap"
                        VerticalAlignment="Center"
                        HorizontalAlignment="Center"
@@ -54,4 +54,3 @@
     </RelativePanel>
 
 </UserControl>
-
