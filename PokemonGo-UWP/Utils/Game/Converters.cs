@@ -337,25 +337,31 @@ namespace PokemonGo_UWP.Utils
         #endregion
     }
 
-    public class ItemToItemIconConverter : IValueConverter
-    {
-        #region Implementation of IValueConverter
+	public class ItemToItemImageConverter : IValueConverter
+	{
+		#region Implementation of IValueConverter
 
-        public object Convert(object value, Type targetType, object parameter, string language)
-        {
-            var itemId = (value as ItemAward)?.ItemId ?? ((value as ItemData)?.ItemId ?? ((ItemDataWrapper)value).ItemId);
-            return new Uri($"ms-appx:///Assets/Items/Item_{(int)itemId}.png");
-        }
+		public object Convert(object value, Type targetType, object parameter, string language)
+		{
+			ItemId itemId = ItemId.ItemUnknown;
 
-        public object ConvertBack(object value, Type targetType, object parameter, string language)
-        {
-            return value;
-        }
+			if (value is ItemAward) itemId = (value as ItemAward).ItemId;
+			if (value is ItemData) itemId = (value as ItemData).ItemId;
+			if (value is ItemDataWrapper) itemId = (value as ItemDataWrapper).ItemId;
+			if (value is AppliedItemWrapper) itemId = (value as AppliedItemWrapper).ItemId;
 
-        #endregion
-    }
+			return new BitmapImage(new Uri($"ms-appx:///Assets/Items/Item_{(int)itemId}.png"));
+		}
 
-    public class PlayerTeamToTeamColorBrushConverter : IValueConverter
+		public object ConvertBack(object value, Type targetType, object parameter, string language)
+		{
+			return value;
+		}
+
+		#endregion
+	}
+
+	public class PlayerTeamToTeamColorBrushConverter : IValueConverter
     {
         #region Implementation of IValueConverter
 
