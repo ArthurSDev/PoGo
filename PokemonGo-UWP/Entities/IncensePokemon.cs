@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
@@ -19,97 +19,94 @@ using POGOProtos.Networking.Responses;
 namespace PokemonGo_UWP.Entities
 {
 
-    public class IncensePokemon : IMapPokemon
-    {
-        /// <summary>
-        /// Infos on the current lured Pokemon
-        /// </summary>
-        [JsonProperty, JsonConverter(typeof(ProtobufJsonNetConverter))]
-        private GetIncensePokemonResponse _incensePokemonResponse;
+	public class IncensePokemon : IMapPokemon
+	{
+		/// <summary>
+		/// Infos on the current lured Pokemon
+		/// </summary>
+		[JsonProperty, JsonConverter(typeof(ProtobufJsonNetConverter))]
+		private GetIncensePokemonResponse _incensePokemonResponse;
 
 
-        /// <summary>
-        ///     HACK - this should fix Pokestop floating on map
-        /// </summary>
-        public Point Anchor => new Point(0.5, 1);
+		public Point Anchor => new Point(0.5, 1);
 
-        public IncensePokemon(GetIncensePokemonResponse incensePokemonResponse, double lat, double lng)
-        {
-            _incensePokemonResponse = incensePokemonResponse;
-            Geoposition = new Geopoint(GetLocation(lat, lng, 1));
-        }
+		public IncensePokemon(GetIncensePokemonResponse incensePokemonResponse, double lat, double lng)
+		{
+			_incensePokemonResponse = incensePokemonResponse;
+			Geoposition = new Geopoint(GetLocation(lat, lng, 1));
+		}
 
-        public void Update(IMapPokemon update)
-        {
-            var incense = (IncensePokemon)update;
+		public void Update(IMapPokemon update)
+		{
+			var incense = (IncensePokemon)update;
 
-            _incensePokemonResponse = incense._incensePokemonResponse;
-            Geoposition = incense.Geoposition;
+			_incensePokemonResponse = incense._incensePokemonResponse;
+			Geoposition = incense.Geoposition;
 
-            OnPropertyChanged(nameof(PokemonId));
-            OnPropertyChanged(nameof(EncounterId));
-            OnPropertyChanged(nameof(SpawnpointId));
-            OnPropertyChanged(nameof(Geoposition));
-        }
+			OnPropertyChanged(nameof(PokemonId));
+			OnPropertyChanged(nameof(EncounterId));
+			OnPropertyChanged(nameof(SpawnpointId));
+			OnPropertyChanged(nameof(Geoposition));
+		}
 
-        #region Wrapped Properties
+		#region Wrapped Properties
 
-        public PokemonId PokemonId => _incensePokemonResponse.PokemonId;
+		public PokemonId PokemonId => _incensePokemonResponse.PokemonId;
 
-        public ulong EncounterId => _incensePokemonResponse.EncounterId;
+		public ulong EncounterId => _incensePokemonResponse.EncounterId;
 
-        public string SpawnpointId => _incensePokemonResponse.EncounterLocation;
+		public string SpawnpointId => _incensePokemonResponse.EncounterLocation;
 
-        public Geopoint Geoposition { get; set; }
+		public Geopoint Geoposition { get; set; }
 
-        #endregion
+		#endregion
 
-        private DelegateCommand _tryCatchPokemon;
+		private DelegateCommand _tryCatchPokemon;
 
-        /// <summary>
-        ///     We're just navigating to the capture page, reporting that the player wants to capture the selected Pokemon.
-        /// </summary>
-        public DelegateCommand TryCatchPokemon => _tryCatchPokemon ?? (
-            _tryCatchPokemon = new DelegateCommand(() =>
-            {
-                NavigationHelper.NavigationState["CurrentPokemon"] = this;
-                // Disable map update
-                GameClient.ToggleUpdateTimer(false);
-                BootStrapper.Current.NavigationService.Navigate(typeof(CapturePokemonPage));
-            }, () => true)
-        );
+		/// <summary>
+		///     We're just navigating to the capture page, reporting that the player wants to capture the selected Pokemon.
+		/// </summary>
+		public DelegateCommand TryCatchPokemon => _tryCatchPokemon ?? (
+			_tryCatchPokemon = new DelegateCommand(() =>
+			{
+				NavigationHelper.NavigationState["CurrentPokemon"] = this;
+				// Disable map update
+				GameClient.ToggleUpdateTimer(false);
+				BootStrapper.Current.NavigationService.Navigate(typeof(CapturePokemonPage));
+			}, () => true)
+		);
 
-        private BasicGeoposition GetLocation(double x0, double y0, int radius)
-        {
-            var random = new Random();
+		private BasicGeoposition GetLocation(double x0, double y0, int radius)
+		{
+			var random = new Random();
 
-            // Convert radius from meters to degrees
-            double radiusInDegrees = radius / 111000f;
+			// Convert radius from meters to degrees
+			double radiusInDegrees = radius / 111000f;
 
-            var u = random.NextDouble();
-            var v = random.NextDouble();
-            var w = radiusInDegrees * Math.Sqrt(u);
-            var t = 2 * Math.PI * v;
-            var x = w * Math.Cos(t);
-            var y = w * Math.Sin(t);
+			var u = random.NextDouble();
+			var v = random.NextDouble();
+			var w = radiusInDegrees * Math.Sqrt(u);
+			var t = 2 * Math.PI * v;
+			var x = w * Math.Cos(t);
+			var y = w * Math.Sin(t);
 
-            // Adjust the x-coordinate for the shrinking of the east-west distances
-            var new_x = x / Math.Cos(y0);
+			// Adjust the x-coordinate for the shrinking of the east-west distances
+			var new_x = x / Math.Cos(y0);
 
-            var foundLatitude = new_x + x0;
-            var foundLongitude = y + y0;
-            return new BasicGeoposition { Latitude = foundLatitude, Longitude = foundLongitude };
-        }
+			var foundLatitude = new_x + x0;
+			var foundLongitude = y + y0;
+			return new BasicGeoposition { Latitude = foundLatitude, Longitude = foundLongitude };
+		}
 
-        #region INotifyPropertyChanged
+		#region INotifyPropertyChanged
 
-        public event PropertyChangedEventHandler PropertyChanged;
+		public event PropertyChangedEventHandler PropertyChanged;
 
-        protected virtual void OnPropertyChanged(string propertyName)
-        {
-            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
-        }
+		protected virtual void OnPropertyChanged(string propertyName)
+		{
+			PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+		}
 
-        #endregion
-    }
+		#endregion
+	}
 }
