@@ -1,4 +1,4 @@
-﻿<Page
+<Page
     x:Class="PokemonGo_UWP.Views.ItemsInventoryPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
@@ -19,7 +19,8 @@
     <Page.Resources>
         <utils:ItemUseabilityToOpacityConverter x:Key="ItemUseabilityToOpacityConverter" 
                                                 CurrentViewMode="{Binding ViewMode}" />
-        
+        <utils:ItemUseabilityToBooleanConverter x:Key="ItemUseabilityToBooleanConverter"
+                                                CurrentViewMode="{Binding ViewMode}" />
         <Storyboard x:Name="ShowDiscardStoryboard">
 
             <DoubleAnimation
@@ -105,12 +106,17 @@
                 </StackPanel>
 
                 <ListView ItemsSource="{Binding ItemsInventory}" 
-                          IsItemClickEnabled="False"
+                          IsItemClickEnabled="True"
                           SelectionMode="None"
                           ScrollViewer.VerticalScrollBarVisibility="Hidden"
                           Margin="8,0"
                           Grid.Row="1"
                           Padding="0,0,0,60">
+                    <interactivity:Interaction.Behaviors>
+                        <core:EventTriggerBehavior EventName="ItemClick">
+                            <core:InvokeCommandAction Command="{Binding UseItemCommand}" InputConverter="{StaticResource ItemClickEventArgsToClickedItemConverter}" />
+                        </core:EventTriggerBehavior>
+                    </interactivity:Interaction.Behaviors>
 
                     <ListView.ItemContainerStyle>
                         <Style TargetType="ListViewItem">
