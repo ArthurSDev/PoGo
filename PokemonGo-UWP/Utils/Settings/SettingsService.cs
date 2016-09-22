@@ -1,4 +1,4 @@
-﻿using System.Linq;
+using System.Linq;
 using Windows.Security.Credentials;
 using PokemonGo.RocketAPI.Enums;
 using Template10.Services.SettingsService;
@@ -165,7 +165,25 @@ namespace PokemonGo_UWP.Utils
 			get { return Get(12D); }
 			set { Set(value); }
 		}
-
 		#endregion
+
+		#region Dev Stuff
+		public bool ShowDebugInfoInErrorMessage
+		{
+			get
+			{
+#if DEBUG
+				//Default value set to true if DEBUG :)
+				return Get(true);
+#else
+				return Get(false);
+#endif
+			}
+			set
+			{
+				Set(value);
+			}
+		}
+#endregion
 	}
 }
