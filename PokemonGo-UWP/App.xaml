@@ -76,6 +76,8 @@
             <utils:IntToBooleanConverter x:Key="IntToBooleanConverter" />
             <utils:PokemonLastHoursVisibiltyConverter x:Key="PokemonLastHoursVisibiltyConverter" />
             <utils:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
+            <utils:IsIncenseActiveToPlayerIconConverter x:Key="IsIncenseActiveToPlayerIconConverter"/>
+            <utils:ItemToItemImageConverter x:Key="ItemToItemImageConverter"/>
 
             <converters:ValueWhenConverter x:Key="VisibleWhenCanEvolveConverter">
                 <converters:ValueWhenConverter.When>
