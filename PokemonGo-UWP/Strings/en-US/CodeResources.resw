@@ -333,5 +333,35 @@ You also got {1} Stardust, {2} Candy and {3} XP.</value>
   <data name="WarningMessage1" xml:space="preserve">
     <value>Remember to be alert at all times.
 Stay aware of your surroundings.</value>
+  <data name="OkText" xml:space="preserve">
+    <value>O. K.</value>
+    <comment>Space between . and K</comment>
+  </data>
+  <data name="PokemonEncounterErrorText" xml:space="preserve">
+    <value>There was an error loading the encounter with {0}, please try again later.</value>
+  </data>
+  <data name="PokemonEncounterNotInRangeText" xml:space="preserve">
+    <value>{0} is not in catch range anymore.</value>
+  </data>
+  <data name="CannotTransferFavorite" xml:space="preserve">
+    <value>Cannot transfer a favorite Pokémon!</value>
+  </data>
+  <data name="CantUseBerryText" xml:space="preserve">
+    <value>You already used a Berry.</value>
+  </data>
+  <data name="LureDetailsTextEmpty" xml:space="preserve">
+    <value>Can have a PokéStop Module installed</value>
+  </data>
+  <data name="LureDetailsTextFilled" xml:space="preserve">
+    <value>A module that attracts Pokémon to a Pokéstop for 30 min. The effect benefits other people nearby.</value>
+  </data>
+  <data name="LureTitleTextEmpty" xml:space="preserve">
+    <value>Empty module slot</value>
+  </data>
+  <data name="LureTitleTextFilled" xml:space="preserve">
+    <value>Lure Module</value>
+  </data>
+  <data name="ItemUseQuestionText" xml:space="preserve">
+    <value>Use {0} ?</value>
   </data>
 </root>
