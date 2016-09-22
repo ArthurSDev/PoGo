@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using Windows.Foundation;
 using Windows.UI;
 using Windows.UI.Xaml;
@@ -9,7 +9,7 @@ namespace PokemonGo_UWP.Controls
 {
     public sealed partial class CircularProgressBar
     {
-        #region ChangedEventHandlers
+        #region ChangedEventHandlers
 
         private static void OnPercentageChanged(DependencyObject sender, DependencyPropertyChangedEventArgs args)
         {
@@ -39,18 +39,30 @@ namespace PokemonGo_UWP.Controls
         private static void OnImageSourcePathChanged(DependencyObject sender, DependencyPropertyChangedEventArgs args)
         {
             CircularProgressBar circularProgressBar = sender as CircularProgressBar;
-            if (circularProgressBar?.ImageSourcePath != null)
-            {
-                circularProgressBar.InnerPathRoot.Fill = new ImageBrush
-                {
-                    ImageSource = circularProgressBar.ImageSourcePath
-                };
-            }
+			try
+			{
+				var ImageSourcePath = circularProgressBar?.ImageSourcePath;
+
+				if (circularProgressBar?.ImageSourcePath != null)
+				{
+					circularProgressBar.InnerPathRoot.Fill = new ImageBrush
+					{
+						ImageSource = circularProgressBar.ImageSourcePath
+					};
+				}
+			}
+			catch
+			{
+				circularProgressBar.InnerPathRoot.Fill = new ImageBrush
+				{
+					ImageSource = new BitmapImage()
+				};
+			}
         }
 
         #endregion
 
-        #region Properties
+        #region Properties
 
         private static readonly DependencyProperty PercentageProperty = DependencyProperty.Register("Percentage", typeof(double), typeof(CircularProgressBar), new PropertyMetadata(65d, OnPercentageChanged));
 
@@ -72,7 +84,7 @@ namespace PokemonGo_UWP.Controls
 
         #endregion
 
-        #region Values
+        #region Values
 
         public int Diameter
         {
